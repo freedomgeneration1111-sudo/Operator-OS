@@ -1,0 +1,3 @@
+export function Loading({ label="Loading…" }:{ label?:string }){return <div className="state-card" role="status" aria-live="polite"><span className="spinner" aria-hidden="true"/>{label}</div>;}
+export function Empty({ title,detail }:{title:string;detail:string}){return <div className="state-card"><strong>{title}</strong><p>{detail}</p></div>;}
+export function ErrorState({ message,onRetry }:{message:string;onRetry?:()=>void}){return <div className="state-card error" role="alert"><strong>Couldn’t Load This View</strong><p>{message}</p>{onRetry?<button className="button secondary" onClick={onRetry}>Try Again</button>:null}</div>;}

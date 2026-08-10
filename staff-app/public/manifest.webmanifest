@@ -1,0 +1,11 @@
+{
+  "name":"Focus Lab Operations",
+  "short_name":"Focus Lab Ops",
+  "description":"Internal CRM and responder workspace for Focus Lab Productions.",
+  "start_url":"/#/inbox",
+  "scope":"/",
+  "display":"standalone",
+  "background_color":"#f4f0e8",
+  "theme_color":"#171512",
+  "icons":[{"src":"/focus-lab-mark.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

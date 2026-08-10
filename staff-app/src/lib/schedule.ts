@@ -1,0 +1,2 @@
+export function localDate(date:Date){const offset=date.getTimezoneOffset()*60_000;return new Date(date.getTime()-offset).toISOString().slice(0,10);}
+export function monthRange(date:Date){const year=date.getFullYear(),month=date.getMonth();const start=new Date(year,month,1),end=new Date(year,month+1,0);return { start:localDate(start),end:localDate(end),label:new Intl.DateTimeFormat(undefined,{month:"long",year:"numeric"}).format(start) };}

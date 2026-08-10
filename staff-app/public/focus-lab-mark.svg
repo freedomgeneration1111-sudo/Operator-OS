@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="440"
+   height="440"
+   viewBox="0 0 440 440"
+   version="1.1"
+   id="svg45"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs21">
+    <linearGradient
+       id="filmGrad"
+       x1="0"
+       x2="1"
+       y1="0"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#E1E3E5"
+         id="stop1" />
+      <stop
+         offset=".30"
+         stop-color="#8E9499"
+         id="stop2" />
+      <stop
+         offset=".72"
+         stop-color="#282C30"
+         id="stop3" />
+      <stop
+         offset="1"
+         stop-color="#0B0D0F"
+         id="stop4" />
+    </linearGradient>
+    <linearGradient
+       id="bladeSilver"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#F6F7F7"
+         id="stop5" />
+      <stop
+         offset=".70"
+         stop-color="#C6CACD"
+         id="stop6" />
+      <stop
+         offset="1"
+         stop-color="#8B9196"
+         id="stop7" />
+    </linearGradient>
+    <linearGradient
+       id="silverGrad"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#FFFFFF"
+         id="stop8" />
+      <stop
+         offset=".50"
+         stop-color="#D6D9DC"
+         id="stop9" />
+      <stop
+         offset="1"
+         stop-color="#858B91"
+         id="stop10" />
+    </linearGradient>
+    <linearGradient
+       id="orangeGrad"
+       x1="0"
+       y1="0"
+       x2="1"
+       y2="1">
+      <stop
+         offset="0"
+         stop-color="#FF9C20"
+         id="stop11" />
+      <stop
+         offset=".56"
+         stop-color="#F47A00"
+         id="stop12" />
+      <stop
+         offset="1"
+         stop-color="#D95F00"
+         id="stop13" />
+    </linearGradient>
+    <radialGradient
+       id="lensGrad"
+       cx=".36"
+       cy=".32"
+       r=".76">
+      <stop
+         offset="0"
+         stop-color="#3E4451"
+         id="stop14" />
+      <stop
+         offset=".25"
+         stop-color="#202837"
+         id="stop15" />
+      <stop
+         offset=".62"
+         stop-color="#0D1118"
+         id="stop16" />
+      <stop
+         offset="1"
+         stop-color="#020304"
+         id="stop17" />
+    </radialGradient>
+    <radialGradient
+       id="glassGrad"
+       cx=".34"
+       cy=".28"
+       r=".88">
+      <stop
+         offset="0"
+         stop-color="#6A5177"
+         stop-opacity=".78"
+         id="stop18" />
+      <stop
+         offset=".30"
+         stop-color="#294B71"
+         stop-opacity=".68"
+         id="stop19" />
+      <stop
+         offset=".66"
+         stop-color="#111827"
+         stop-opacity=".78"
+         id="stop20" />
+      <stop
+         offset="1"
+         stop-color="#020305"
+         id="stop21" />
+    </radialGradient>
+  </defs>
+  <g
+     transform="translate(20,12)"
+     id="g45">
+    <path
+       d="M 169.85,63.17 A 145,145 0 0 1 263.56,74.67 L 266.69,135.94 A 96,96 0 0 0 210.03,109.53 Z"
+       fill="url(#bladeSilver)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path21" />
+    <path
+       d="M 278.97,83.39 A 145,145 0 0 1 337.10,157.79 L 295.99,203.32 A 96,96 0 0 0 274.61,144.59 Z"
+       fill="url(#orangeGrad)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path22" />
+    <path
+       d="M 341.83,174.85 A 145,145 0 0 1 330.33,268.56 L 269.06,271.69 A 96,96 0 0 0 295.47,215.03 Z"
+       fill="url(#bladeSilver)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path23" />
+    <path
+       d="M 321.61,283.97 A 145,145 0 0 1 247.21,342.10 L 201.68,300.99 A 96,96 0 0 0 260.41,279.61 Z"
+       fill="url(#bladeSilver)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path24" />
+    <path
+       d="M 230.15,346.83 A 145,145 0 0 1 136.44,335.33 L 133.31,274.06 A 96,96 0 0 0 189.97,300.47 Z"
+       fill="url(#orangeGrad)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path25" />
+    <path
+       d="M 121.03,326.61 A 145,145 0 0 1 62.90,252.21 L 104.01,206.68 A 96,96 0 0 0 125.39,265.41 Z"
+       fill="url(#bladeSilver)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path26" />
+    <path
+       d="M 58.17,235.15 A 145,145 0 0 1 69.67,141.44 L 130.94,138.31 A 96,96 0 0 0 104.53,194.97 Z"
+       fill="url(#bladeSilver)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path27" />
+    <path
+       d="M 78.39,126.03 A 145,145 0 0 1 152.79,67.90 L 198.32,109.01 A 96,96 0 0 0 139.59,130.39 Z"
+       fill="url(#bladeSilver)"
+       stroke="#111214"
+       stroke-width="2.8"
+       stroke-linejoin="round"
+       id="path28" />
+    <path
+       d="M 126 74 Q 194 49 286 80 L 280 119 Q 193 92 117 109 Z"
+       fill="url(#filmGrad)"
+       stroke="#111214"
+       stroke-width="2.5"
+       id="path29" />
+    <path
+       d="M 128 100 Q 195 78 282 103"
+       fill="none"
+       stroke="#8A9096"
+       stroke-width="1.7"
+       opacity=".55"
+       id="path30" />
+    <rect
+       x="136.0"
+       y="75.0"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect30" />
+    <rect
+       x="154.1"
+       y="76.5"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect31" />
+    <rect
+       x="172.2"
+       y="78.1"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect32" />
+    <rect
+       x="190.3"
+       y="79.7"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect33" />
+    <rect
+       x="208.4"
+       y="81.2"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect34" />
+    <rect
+       x="226.5"
+       y="82.8"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect35" />
+    <rect
+       x="244.6"
+       y="84.3"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect36" />
+    <rect
+       x="262.7"
+       y="85.8"
+       width="7.4"
+       height="15"
+       rx="2"
+       fill="#050607"
+       opacity=".96"
+       id="rect37" />
+    <circle
+       cx="200"
+       cy="205"
+       r="112"
+       fill="url(#silverGrad)"
+       stroke="#111214"
+       stroke-width="3"
+       id="circle37" />
+    <circle
+       cx="200"
+       cy="205"
+       r="100"
+       fill="#050607"
+       stroke="#111214"
+       stroke-width="2"
+       id="circle38" />
+    <circle
+       cx="200"
+       cy="205"
+       r="89"
+       fill="#2D3238"
+       stroke="url(#silverGrad)"
+       stroke-width="4"
+       id="circle39" />
+    <circle
+       cx="200"
+       cy="205"
+       r="77"
+       fill="url(#lensGrad)"
+       stroke="#050607"
+       stroke-width="6"
+       id="circle40" />
+    <circle
+       cx="200"
+       cy="205"
+       r="59"
+       fill="url(#glassGrad)"
+       stroke="#050607"
+       stroke-width="4"
+       id="circle41" />
+    <circle
+       cx="200"
+       cy="205"
+       r="39"
+       fill="#050607"
+       opacity=".82"
+       id="circle42" />
+    <ellipse
+       cx="168"
+       cy="171"
+       rx="10"
+       ry="18"
+       fill="#B9C5D8"
+       opacity=".20"
+       transform="rotate(-38 168 171)"
+       id="ellipse42" />
+    <circle
+       cx="239"
+       cy="234"
+       r="12"
+       fill="#E95984"
+       opacity=".88"
+       id="circle43" />
+    <circle
+       cx="218"
+       cy="187"
+       r="8"
+       fill="#9AAED1"
+       opacity=".48"
+       id="circle44" />
+    <circle
+       cx="241"
+       cy="231"
+       r="4.6"
+       fill="#FFE1E8"
+       opacity=".82"
+       id="circle45" />
+  </g>
+</svg>

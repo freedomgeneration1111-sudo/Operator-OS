@@ -1,0 +1,37 @@
+import { useCallback,useEffect,useState } from "react";
+import { DevLogin } from "./components/DevLogin";
+import { ErrorState,Loading } from "./components/AsyncState";
+import { Shell } from "./components/Shell";
+import { useHashRoute,useOnline } from "./lib/hooks";
+import { usePresence } from "./lib/usePresence";
+import { SessionProvider,useSession } from "./lib/session";
+import type { OperationsStatus,Responder } from "./lib/types";
+import { InboxView } from "./views/InboxView";
+import { InquiryDetailView } from "./views/InquiryDetailView";
+import { ScheduleView } from "./views/ScheduleView";
+import { ChatView } from "./views/ChatView";
+import { SearchView } from "./views/SearchView";
+import { SettingsView } from "./views/SettingsView";
+
+export default function App(){return <SessionProvider><SessionGate/></SessionProvider>;}
+function SessionGate(){const {session}=useSession();return session?<OperationsWorkspace/>:<DevLogin/>;}
+function OperationsWorkspace(){
+  const {session,logout}=useSession();if(!session)throw new Error("Session required");
+  const route=useHashRoute();const online=useOnline();const [responders,setResponders]=useState<Responder[]>([]);const [status,setStatus]=useState<OperationsStatus|null>(null);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [refresh,setRefresh]=useState(0);
+  const refreshStatus=useCallback(()=>setRefresh((value)=>value+1),[]);
+  useEffect(()=>{let active=true;Promise.all([session.client.responders(),session.client.status()]).then(([responderResult,statusResult])=>{if(active){setResponders(responderResult.responders);setStatus(statusResult);setError("");}}).catch((reason)=>{if(active)setError(reason instanceof Error?reason.message:"Could not load staff status.");}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[session.client,refresh]);
+  useEffect(()=>{const timer=window.setInterval(refreshStatus,30_000);return()=>window.clearInterval(timer);},[refreshStatus]);
+  const presence=usePresence(session.client,session.responder.id,status?.presenceTimeoutSeconds??120,refreshStatus);
+  async function endSession(){if(presence.enabled)await presence.toggle(false);logout();}
+  if(loading)return <Loading label="Opening staff workspace…"/>;
+  if(error&&!status)return <main className="login-shell"><ErrorState message={error} onRetry={refreshStatus}/><button className="button text" onClick={logout}>End Development Session</button></main>;
+  const detailMatch=route.match(/^\/inquiry\/([^/?]+)/);
+  let content;
+  if(detailMatch)content=<InquiryDetailView client={session.client} id={decodeURIComponent(detailMatch[1]!)} responders={responders} currentResponderId={session.responder.id} online={online}/>;
+  else if(route.startsWith("/schedule"))content=<ScheduleView client={session.client}/>;
+  else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status}/>;
+  else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
+  else if(route.startsWith("/settings"))content=<SettingsView status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
+  else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
+  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={session.responder.display_label} onLogout={()=>void endSession()}>{content}</Shell>;
+}
