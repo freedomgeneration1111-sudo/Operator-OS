@@ -1,0 +1,67 @@
+import { z } from "zod";
+import { assessScheduling } from "./scheduling";
+import { getInquiryDetail, listBlockingWindows, listInquiries, newId, recordActivity } from "./repository";
+
+const workflowSchema = z.object({ state: z.enum(["new","reviewing","qualified","quoted","won","lost","archived"]), actorId: z.string().max(100).optional() }).strict();
+const noteSchema = z.object({ body: z.string().trim().min(1).max(4000), actorId: z.string().max(100).optional() }).strict();
+const assignmentSchema = z.object({ responderId: z.string().min(1).max(100), assigned: z.boolean(), actorId: z.string().max(100).optional() }).strict();
+const capacitySchema = z.object({ blocksCapacity: z.boolean(), actorId: z.string().max(100).optional() }).strict();
+
+export async function handleCrm(request: Request, db: D1Database, path: string, capacity: number): Promise<Response> {
+  if (request.method === "GET" && path === "/v1/internal/inquiries") {
+    return Response.json({ ok: true, inquiries: await listInquiries(db,new URL(request.url).searchParams.get("query")) });
+  }
+  const match = path.match(/^\/v1\/internal\/inquiries\/([^/]+)(?:\/(workflow|notes|assignment|capacity|conflicts))?$/);
+  if (!match) return Response.json({ ok: false, error: { code: "not_found", message: "Route not found" } },{ status: 404 });
+  const inquiryId = decodeURIComponent(match[1]!);
+  const action = match[2];
+  const detail = await getInquiryDetail(db,inquiryId);
+  if (!detail) return Response.json({ ok: false, error: { code: "not_found", message: "Inquiry not found" } },{ status: 404 });
+  if (request.method === "GET" && !action) return Response.json({ ok: true, ...detail });
+  const row = detail.inquiry as Record<string,unknown>;
+  const now = new Date().toISOString();
+  if (request.method === "PATCH" && action === "workflow") {
+    const parsed = workflowSchema.safeParse(await request.json());
+    if (!parsed.success) return invalid(parsed.error.flatten().fieldErrors);
+    await db.prepare("UPDATE inquiries SET workflow_state=?,updated_at=? WHERE id=?").bind(parsed.data.state,now,inquiryId).run();
+    await recordActivity(db,inquiryId,String(row.event_id),"workflow_changed",parsed.data.actorId ?? null,{ state: parsed.data.state },now);
+    return Response.json({ ok: true, state: parsed.data.state, updatedAt: now });
+  }
+  if (request.method === "POST" && action === "notes") {
+    const parsed = noteSchema.safeParse(await request.json());
+    if (!parsed.success) return invalid(parsed.error.flatten().fieldErrors);
+    const noteId = newId("note");
+    await db.prepare("INSERT INTO internal_notes (id,inquiry_id,author_responder_id,body,created_at) VALUES (?,?,?,?,?)")
+      .bind(noteId,inquiryId,parsed.data.actorId ?? null,parsed.data.body,now).run();
+    await recordActivity(db,inquiryId,String(row.event_id),"internal_note_added",parsed.data.actorId ?? null,{ noteId },now);
+    return Response.json({ ok: true, noteId, createdAt: now },{ status: 201 });
+  }
+  if (request.method === "PATCH" && action === "assignment") {
+    const parsed = assignmentSchema.safeParse(await request.json());
+    if (!parsed.success) return invalid(parsed.error.flatten().fieldErrors);
+    if (parsed.data.assigned) await db.prepare("INSERT OR REPLACE INTO assignments (inquiry_id,responder_id,assigned_at,assigned_by) VALUES (?,?,?,?)")
+      .bind(inquiryId,parsed.data.responderId,now,parsed.data.actorId ?? null).run();
+    else await db.prepare("DELETE FROM assignments WHERE inquiry_id=? AND responder_id=?").bind(inquiryId,parsed.data.responderId).run();
+    await recordActivity(db,inquiryId,String(row.event_id),parsed.data.assigned ? "responder_assigned" : "responder_unassigned",parsed.data.actorId ?? null,{ responderId: parsed.data.responderId },now);
+    return Response.json({ ok: true, assigned: parsed.data.assigned, updatedAt: now });
+  }
+  if (request.method === "PATCH" && action === "capacity") {
+    const parsed = capacitySchema.safeParse(await request.json());
+    if (!parsed.success) return invalid(parsed.error.flatten().fieldErrors);
+    await db.prepare("UPDATE events SET blocks_capacity=?,updated_at=? WHERE id=?").bind(parsed.data.blocksCapacity ? 1 : 0,now,String(row.event_id)).run();
+    await recordActivity(db,inquiryId,String(row.event_id),"capacity_blocking_changed",parsed.data.actorId ?? null,{ blocksCapacity: parsed.data.blocksCapacity },now);
+    return Response.json({ ok: true, blocksCapacity: parsed.data.blocksCapacity, updatedAt: now });
+  }
+  if (request.method === "GET" && action === "conflicts") {
+    const proposed = { id: String(row.event_id), startDate: value(row.start_date), endDate: value(row.end_date), startTime: value(row.start_time), endTime: value(row.end_time), blocksCapacity: Boolean(row.blocks_capacity), schedulingState: value(row.scheduling_state) ?? undefined };
+    if (!proposed.startDate) return Response.json({ ok: true, assessment: assessScheduling(proposed,[],capacity) });
+    const windows = await listBlockingWindows(db,proposed.startDate,proposed.endDate ?? proposed.startDate);
+    return Response.json({ ok: true, assessment: assessScheduling(proposed,windows.filter((item) => item.id !== proposed.id),capacity) });
+  }
+  return Response.json({ ok: false, error: { code: "method_not_allowed", message: "Method not allowed" } },{ status: 405 });
+}
+
+const value = (input: unknown) => typeof input === "string" ? input : null;
+function invalid(fields: Record<string,string[] | undefined>) {
+  return Response.json({ ok: false, error: { code: "validation_error", message: "Request validation failed", fields } },{ status: 422 });
+}

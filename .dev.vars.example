@@ -1,0 +1,6 @@
+# Development-only examples. Copy to operations/.dev.vars; never commit that file.
+INTERNAL_API_TOKEN=replace-with-a-long-random-development-token
+
+# Leave both unset to make public chat status safely return "unavailable".
+# MESSAGING_PROVIDER=shared-business-inbox
+# MESSAGING_DESTINATION_URL=https://verified-provider.example/destination

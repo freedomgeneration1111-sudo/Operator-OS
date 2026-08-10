@@ -1,0 +1,100 @@
+import { env,exports } from "cloudflare:workers";
+const SELF=exports.default;
+import { beforeEach,describe,expect,it } from "vitest";
+
+const validInquiry = {
+  eventType: "Wedding",date: "2027-06-10",location: "Dallas, TX",services: ["Photo","Video"],
+  guests: "150",budget: "Not sure yet",name: "Synthetic Customer",email: "synthetic@example.test",
+  phone: "",contact: "email",note: "Synthetic test inquiry",
+};
+const inquiryRequest = (body: unknown,key = "test-key-00000001") => new Request("https://operations.example.test/v1/inquiries",{
+  method: "POST",headers: { "Content-Type": "application/json","Idempotency-Key": key },body: JSON.stringify(body),
+});
+
+beforeEach(async () => {
+  await env.DB.prepare("INSERT INTO responders (id,display_label,active,created_at,updated_at) VALUES (?,?,?,?,?)")
+    .bind("responder-test","Synthetic responder",1,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z").run();
+});
+
+describe("POST /v1/inquiries",() => {
+  it("persists a valid contact, event, inquiry, services and activity",async () => {
+    const response = await SELF.fetch(inquiryRequest(validInquiry));
+    expect(response.status).toBe(201);
+    const body = await response.json<{ inquiryId: string;status: string }>();
+    expect(body.status).toBe("received_for_review");
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiry_services").first<number>("count")).toBe(2);
+    expect(await env.DB.prepare("SELECT blocks_capacity FROM events WHERE id=(SELECT event_id FROM inquiries WHERE id=?)").bind(body.inquiryId).first<number>("blocks_capacity")).toBe(0);
+  });
+  it("rejects missing required fields",async () => expect((await SELF.fetch(inquiryRequest({ name: "Only name" }))).status).toBe(422));
+  it("rejects malformed fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,email: "not-email" }))).status).toBe(422));
+  it("rejects unexpected fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,isAdmin: true }))).status).toBe(422));
+  it("deduplicates retries by idempotency key",async () => {
+    expect((await SELF.fetch(inquiryRequest(validInquiry,"repeat-key-00000001"))).status).toBe(201);
+    const replay = await SELF.fetch(inquiryRequest(validInquiry,"repeat-key-00000001"));
+    expect(replay.status).toBe(200);
+    expect((await replay.json<{ idempotentReplay: boolean }>()).idempotentReplay).toBe(true);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(1);
+  });
+  it("supports a multi-day date range",async () => {
+    const response = await SELF.fetch(inquiryRequest({ ...validInquiry,endDate: "2027-06-12" },"multi-day-00000001"));
+    expect(response.status).toBe(201);
+    expect(await env.DB.prepare("SELECT end_date FROM events").first<string>("end_date")).toBe("2027-06-12");
+  });
+  it("returns a safe error when the database fails",async () => {
+    await env.DB.prepare("ALTER TABLE inquiries RENAME TO inquiries_unavailable").run();
+    const response = await SELF.fetch(inquiryRequest(validInquiry,"db-fail-key-000001"));
+    expect(response.status).toBe(500);
+    const body = await response.json<{ error: { code: string;message: string } }>();
+    expect(body.error).toEqual({ code: "internal_error",message: "The operation could not be completed" });
+    await env.DB.prepare("ALTER TABLE inquiries_unavailable RENAME TO inquiries").run();
+  });
+});
+
+describe("chat status and responder presence",() => {
+  const status = () => SELF.fetch("https://operations.example.test/v1/chat/status");
+  const heartbeat = (responderId: string,available: boolean,token = "development-test-token-00000000") => SELF.fetch("https://operations.example.test/v1/internal/presence/heartbeat",{
+    method: "POST",headers: { "Content-Type": "application/json",Authorization: `Bearer ${token}` },body: JSON.stringify({ responderId,available }),
+  });
+  it("returns async with no current responder",async () => expect((await status()).json()).resolves.toMatchObject({ state: "async",label: "Send us a DM" }));
+  it("returns live with one or multiple current responders",async () => {
+    expect((await heartbeat("responder-test",true)).status).toBe(200);
+    expect((await status()).json()).resolves.toMatchObject({ state: "live",label: "Live Chat" });
+    await env.DB.prepare("INSERT INTO responders VALUES (?,?,?,?,?)").bind("responder-two","Second synthetic responder",1,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z").run();
+    await heartbeat("responder-two",true);
+    expect((await status()).json()).resolves.toMatchObject({ state: "live" });
+  });
+  it("falls back to async after the last heartbeat expires",async () => {
+    await heartbeat("responder-test",true);
+    await env.DB.prepare("UPDATE responder_presence SET expires_at=?").bind("2000-01-01T00:00:00.000Z").run();
+    expect((await status()).json()).resolves.toMatchObject({ state: "async" });
+  });
+  it("rejects unauthorized heartbeats",async () => expect((await heartbeat("responder-test",true,"wrong-token")).status).toBe(401));
+  it("returns unavailable when no verified destination is configured",async () => {
+    const original = env.MESSAGING_DESTINATION_URL;
+    env.MESSAGING_DESTINATION_URL = "";
+    expect((await status()).json()).resolves.toMatchObject({ state: "unavailable",destinationUrl: null });
+    env.MESSAGING_DESTINATION_URL = original;
+  });
+});
+
+describe("protected CRM API and database integrity",() => {
+  it("applies migrations and enforces foreign keys",async () => {
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(1);
+    await expect(env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("missing","Photo").run()).rejects.toThrow();
+  });
+  it("does not expose CRM enumeration publicly",async () => {
+    const response = await SELF.fetch("https://operations.example.test/v1/internal/inquiries");
+    expect(response.status).toBe(401);
+    expect(JSON.stringify(await response.json())).not.toContain("synthetic@example.test");
+  });
+  it("supports protected list and detail endpoints",async () => {
+    const created = await SELF.fetch(inquiryRequest(validInquiry,"crm-list-key-00001"));
+    const id = (await created.json<{ inquiryId: string }>()).inquiryId;
+    const headers = { Authorization: "Bearer development-test-token-00000000" };
+    expect((await SELF.fetch("https://operations.example.test/v1/internal/inquiries",{ headers })).status).toBe(200);
+    const detail = await SELF.fetch(`https://operations.example.test/v1/internal/inquiries/${id}`,{ headers });
+    expect(detail.status).toBe(200);
+    expect(await detail.text()).not.toContain("INTERNAL_API_TOKEN");
+  });
+});

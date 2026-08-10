@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  title: Focus Lab Operations API
+  version: 0.1.0
+  description: Review-stage contract. Inquiry receipt never confirms availability.
+servers:
+  - url: http://localhost:8787
+paths:
+  /v1/inquiries:
+    post:
+      summary: Persist a website inquiry for human review
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InquiryRequest' }
+      responses:
+        '201': { description: Persisted, content: { application/json: { schema: { $ref: '#/components/schemas/InquiryCreated' } } } }
+        '200': { description: Idempotent replay, content: { application/json: { schema: { $ref: '#/components/schemas/InquiryCreated' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/chat/status:
+    get:
+      summary: Resolve provider-neutral customer messaging state
+      responses:
+        '200':
+          description: Current public status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state,label,destinationUrl,checkedAt]
+                properties:
+                  state: { enum: [live,async,unavailable] }
+                  label: { type: string }
+                  destinationUrl: { type: [string,'null'], format: uri }
+                  checkedAt: { type: string, format: date-time }
+  /v1/internal/presence/heartbeat:
+    post:
+      summary: Set and refresh explicit responder availability
+      security: [{ provisionalBearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [responderId,available]
+              properties:
+                responderId: { type: string }
+                available: { type: boolean }
+      responses:
+        '200': { description: Presence updated }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/internal/inquiries:
+    get:
+      summary: List or search inquiries
+      security: [{ provisionalBearer: [] }]
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+      responses:
+        '200': { description: Inquiry summaries }
+        '401': { $ref: '#/components/responses/Error' }
+  /v1/internal/inquiries/{inquiryId}:
+    get:
+      summary: Read inquiry, event, contact, services, notes, assignments, activity and conversation metadata
+      security: [{ provisionalBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/InquiryId' }]
+      responses:
+        '200': { description: Internal detail }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /v1/internal/inquiries/{inquiryId}/workflow:
+    patch:
+      summary: Update internal workflow state
+      security: [{ provisionalBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/InquiryId' }]
+      responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/inquiries/{inquiryId}/notes:
+    post:
+      summary: Add an internal-only note
+      security: [{ provisionalBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/InquiryId' }]
+      responses: { '201': { description: Created }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/inquiries/{inquiryId}/assignment:
+    patch:
+      summary: Assign or unassign a responder
+      security: [{ provisionalBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/InquiryId' }]
+      responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/inquiries/{inquiryId}/capacity:
+    patch:
+      summary: Set explicit event capacity blocking
+      security: [{ provisionalBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/InquiryId' }]
+      responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/inquiries/{inquiryId}/conflicts:
+    get:
+      summary: Get internal scheduling decision support
+      security: [{ provisionalBearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/InquiryId' }]
+      responses: { '200': { description: Scheduling assessment }, '401': { $ref: '#/components/responses/Error' } }
+components:
+  securitySchemes:
+    provisionalBearer:
+      type: http
+      scheme: bearer
+      description: Development boundary only; production staff identity is unresolved.
+  parameters:
+    InquiryId: { in: path, name: inquiryId, required: true, schema: { type: string } }
+  responses:
+    Error:
+      description: Typed error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    InquiryRequest:
+      type: object
+      additionalProperties: false
+      required: [eventType,date,services,name,email,contact]
+      properties:
+        eventType: { type: string, maxLength: 100 }
+        date: { type: string, format: date }
+        endDate: { type: string, format: date }
+        startTime: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }
+        endTime: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }
+        location: { type: string, maxLength: 300 }
+        services: { type: array, maxItems: 20, items: { type: string, maxLength: 100 } }
+        guests: { oneOf: [{ type: integer, minimum: 1, maximum: 100000 },{ type: string, pattern: '^\\d{1,6}$' }] }
+        budget: { type: string, maxLength: 100 }
+        name: { type: string, maxLength: 150 }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, maxLength: 40 }
+        contact: { enum: [email,phone] }
+        note: { type: string, maxLength: 4000 }
+        source: { type: string, maxLength: 100 }
+    InquiryCreated:
+      type: object
+      required: [ok,inquiryId,eventId,createdAt,idempotentReplay,status,message]
+      properties:
+        ok: { const: true }
+        inquiryId: { type: string }
+        eventId: { type: string }
+        createdAt: { type: string, format: date-time }
+        idempotentReplay: { type: boolean }
+        status: { const: received_for_review }
+        message: { type: string }
+    Error:
+      type: object
+      required: [ok,error]
+      properties:
+        ok: { const: false }
+        error:
+          type: object
+          required: [code,message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: array, items: { type: string } } }
