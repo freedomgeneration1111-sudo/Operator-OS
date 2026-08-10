@@ -13,7 +13,7 @@
     }
   ],
   "vars": {
-    "PUBLIC_SITE_ORIGIN": "http://localhost:3000",
+    "PUBLIC_SITE_ORIGIN": "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
     "CONCURRENT_EVENT_CAPACITY": "1",
     "PRESENCE_TIMEOUT_SECONDS": "120"
   },

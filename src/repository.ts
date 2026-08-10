@@ -91,7 +91,7 @@ export async function getInquiryDetail(db: D1Database, inquiryId: string) {
   const [services,assignments,notes,activities,conversations] = await db.batch([
     db.prepare("SELECT service_name FROM inquiry_services WHERE inquiry_id=? ORDER BY service_name").bind(inquiryId),
     db.prepare(`SELECT a.responder_id,r.display_label,a.assigned_at FROM assignments a JOIN responders r ON r.id=a.responder_id WHERE a.inquiry_id=?`).bind(inquiryId),
-    db.prepare("SELECT id,author_responder_id,body,created_at FROM internal_notes WHERE inquiry_id=? ORDER BY created_at DESC").bind(inquiryId),
+    db.prepare("SELECT n.id,n.author_responder_id,r.display_label AS author_label,n.body,n.created_at FROM internal_notes n LEFT JOIN responders r ON r.id=n.author_responder_id WHERE n.inquiry_id=? ORDER BY n.created_at DESC").bind(inquiryId),
     db.prepare("SELECT id,actor_kind,actor_id,activity_type,metadata_json,created_at FROM activities WHERE inquiry_id=? ORDER BY created_at DESC").bind(inquiryId),
     db.prepare("SELECT id,provider,external_conversation_id,channel_state,created_at,updated_at FROM conversations WHERE inquiry_id=? ORDER BY updated_at DESC").bind(inquiryId),
   ]);

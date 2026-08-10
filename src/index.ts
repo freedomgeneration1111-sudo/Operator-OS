@@ -4,6 +4,7 @@ import { inquiryRequestSchema, type ApiErrorResponse } from "./contracts";
 import { handleCrm } from "./crm";
 import { createConfiguredMessagingProvider, resolveChatStatus } from "./messaging";
 import { createInquiry } from "./repository";
+import { handleStaffApi } from "./staff-api";
 
 const heartbeatSchema = z.object({ responderId: z.string().trim().min(1).max(100), available: z.boolean() }).strict();
 const IDEMPOTENCY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
@@ -83,7 +84,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!await secureTokenMatches(bearerToken(request),env.INTERNAL_API_TOKEN)) {
       return json({ ok: false,error: { code: "unauthorized",message: "Authentication required" } },401,{ "WWW-Authenticate": "Bearer" });
     }
-    return handleCrm(request,env.DB,url.pathname,positiveInteger(env.CONCURRENT_EVENT_CAPACITY,1));
+    const capacity=positiveInteger(env.CONCURRENT_EVENT_CAPACITY,1);
+    const staffResponse=await handleStaffApi(request,env,url.pathname,capacity);
+    if (staffResponse) return staffResponse;
+    return handleCrm(request,env.DB,url.pathname,capacity);
   }
   return json({ ok: false,error: { code: "not_found",message: "Route not found" } },404);
 }

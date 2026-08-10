@@ -111,6 +111,34 @@ paths:
       security: [{ provisionalBearer: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses: { '200': { description: Scheduling assessment }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/responders:
+    get: { summary: List active internal responders and presence, security: [{ provisionalBearer: [] }], responses: { "200": { description: Active responders }, "401": { $ref: "#/components/responses/Error" } } }
+  /v1/internal/status:
+    get: { summary: Read aggregate operational status, security: [{ provisionalBearer: [] }], responses: { "200": { description: Internal status }, "401": { $ref: "#/components/responses/Error" } } }
+  /v1/internal/inbox:
+    get:
+      summary: Read the bounded filtered staff inbox
+      security: [{ provisionalBearer: [] }]
+      parameters:
+        - { in: query, name: query, schema: { type: string, maxLength: 120 } }
+        - { in: query, name: workflow, schema: { type: string } }
+        - { in: query, name: assignment, schema: { type: string, maxLength: 100 } }
+        - { in: query, name: eventFamily, schema: { type: string, maxLength: 100 } }
+        - { in: query, name: date, schema: { type: string, format: date } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 25 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, maximum: 5000, default: 0 } }
+      responses: { "200": { description: Inbox page }, "401": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/internal/schedule:
+    get:
+      summary: Read an event range with scheduling assessments
+      security: [{ provisionalBearer: [] }]
+      parameters:
+        - { in: query, name: start, required: true, schema: { type: string, format: date } }
+        - { in: query, name: end, required: true, schema: { type: string, format: date } }
+        - { in: query, name: state, schema: { type: string, default: all } }
+      responses: { "200": { description: Range events and assessments }, "401": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/internal/conversations:
+    get: { summary: List provider-neutral conversation metadata, security: [{ provisionalBearer: [] }], responses: { "200": { description: Conversation metadata }, "401": { $ref: "#/components/responses/Error" } } }
 components:
   securitySchemes:
     provisionalBearer:

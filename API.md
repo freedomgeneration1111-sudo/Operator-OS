@@ -14,6 +14,11 @@
 | `/v1/internal/inquiries/{id}/assignment` | PATCH | Provisional bearer | `{ responderId: string, assigned: boolean, actorId?: string }` | Assignment state/timestamp |
 | `/v1/internal/inquiries/{id}/capacity` | PATCH | Provisional bearer | `{ blocksCapacity: boolean, actorId?: string }` | Capacity-blocking state/timestamp |
 | `/v1/internal/inquiries/{id}/conflicts` | GET | Provisional bearer | None | Internal scheduling assessment |
+| `/v1/internal/responders` | GET | Provisional bearer | None | Active internal responders and presence |
+| `/v1/internal/status` | GET | Provisional bearer | None | Chat/provider state, active responders, timeout, capacity |
+| `/v1/internal/inbox` | GET | Provisional bearer | Bounded filters and pagination | Staff inbox page, max 50 |
+| `/v1/internal/schedule` | GET | Provisional bearer | Required date range | Events with internal conflict assessments |
+| `/v1/internal/conversations` | GET | Provisional bearer | Optional query | Metadata only; no message bodies |
 
 All JSON mutation bodies reject unknown fields. Validation failures use `422`; malformed JSON or idempotency metadata uses `400`; missing internal auth uses `401`; missing records use `404`; unexpected persistence failures use a generic `500` without exposing SQL or private data.
 
