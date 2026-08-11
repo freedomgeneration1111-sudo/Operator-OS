@@ -7,8 +7,15 @@ const validInquiry = {
   guests: "150",budget: "Not sure yet",name: "Synthetic Customer",email: "synthetic@example.test",
   phone: "",contact: "email",note: "Synthetic test inquiry",turnstileToken:"test-turnstile-pass",website:"",
 };
+
+const publicOrigin="http://localhost:3000";
+function expectPublicCors(response:Response){
+  expect(response.headers.get("Access-Control-Allow-Origin")).toBe(publicOrigin);
+  expect(response.headers.get("Vary")).toContain("Origin");
+}
+
 const inquiryRequest = (body: unknown,key = "test-key-00000001") => new Request("https://operations.example.test/v1/inquiries",{
-  method: "POST",headers: { "Content-Type": "application/json","Idempotency-Key": key,"CF-Connecting-IP": `192.0.2.${Math.abs([...key].reduce((sum,char)=>sum+char.charCodeAt(0),0))%250+1}` },body: JSON.stringify(body),
+  method: "POST",headers: { "Content-Type": "application/json","Idempotency-Key": key,"Origin":publicOrigin,"CF-Connecting-IP": `192.0.2.${Math.abs([...key].reduce((sum,char)=>sum+char.charCodeAt(0),0))%250+1}` },body: JSON.stringify(body),
 });
 
 beforeEach(async () => {
@@ -17,20 +24,22 @@ beforeEach(async () => {
 });
 
 describe("POST /v1/inquiries",() => {
+  it("answers the exact browser preflight",async()=>{const response=await SELF.fetch("https://operations.example.test/v1/inquiries",{method:"OPTIONS",headers:{Origin:publicOrigin,"Access-Control-Request-Method":"POST","Access-Control-Request-Headers":"content-type,idempotency-key"}});expect(response.status).toBe(204);expectPublicCors(response);expect(response.headers.get("Access-Control-Allow-Methods")).toContain("POST");expect(response.headers.get("Access-Control-Allow-Headers")?.toLowerCase()).toContain("content-type");expect(response.headers.get("Access-Control-Allow-Headers")?.toLowerCase()).toContain("idempotency-key");});
   it("persists a valid contact, event, inquiry, services and activity",async () => {
     const response = await SELF.fetch(inquiryRequest(validInquiry));
     expect(response.status).toBe(201);
+    expectPublicCors(response);
     const body = await response.json<{ inquiryId: string;status: string }>();
     expect(body.status).toBe("received_for_review");
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(1);
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiry_services").first<number>("count")).toBe(2);
     expect(await env.DB.prepare("SELECT blocks_capacity FROM events WHERE id=(SELECT event_id FROM inquiries WHERE id=?)").bind(body.inquiryId).first<number>("blocks_capacity")).toBe(0);
   });
-  it("rejects missing required fields",async () => expect((await SELF.fetch(inquiryRequest({ name: "Only name" }))).status).toBe(422));
+  it("rejects missing required fields with CORS",async () => {const response=await SELF.fetch(inquiryRequest({ name: "Only name" }));expect(response.status).toBe(422);expectPublicCors(response);});
   it("rejects malformed fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,email: "not-email" }))).status).toBe(422));
   it("rejects a missing Turnstile token",async () => { const body={...validInquiry,turnstileToken:undefined};expect((await SELF.fetch(inquiryRequest(body,"missing-turnstile-01"))).status).toBe(422); });
-  it("rejects an invalid Turnstile token",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,turnstileToken:"invalid" },"invalid-turnstile-01"))).status).toBe(400));
-  it("rejects a honeypot hit without persistence",async () => { const response=await SELF.fetch(inquiryRequest({ ...validInquiry,website:"spam.example" },"honeypot-key-00001"));expect(response.status).toBe(400);expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(0); });
+  it("rejects an invalid Turnstile token with CORS",async () => {const response=await SELF.fetch(inquiryRequest({ ...validInquiry,turnstileToken:"invalid" },"invalid-turnstile-01"));expect(response.status).toBe(400);expectPublicCors(response);});
+  it("rejects a honeypot hit without persistence",async () => { const response=await SELF.fetch(inquiryRequest({ ...validInquiry,website:"spam.example" },"honeypot-key-00001"));expect(response.status).toBe(400);expectPublicCors(response);expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(0); });
   it("rejects unexpected fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,isAdmin: true }))).status).toBe(422));
   it("deduplicates retries by idempotency key",async () => {
     expect((await SELF.fetch(inquiryRequest(validInquiry,"repeat-key-00000001"))).status).toBe(201);
@@ -48,6 +57,7 @@ describe("POST /v1/inquiries",() => {
     await env.DB.prepare("ALTER TABLE inquiries RENAME TO inquiries_unavailable").run();
     const response = await SELF.fetch(inquiryRequest(validInquiry,"db-fail-key-000001"));
     expect(response.status).toBe(500);
+    expectPublicCors(response);
     const body = await response.json<{ error: { code: string;message: string } }>();
     expect(body.error).toEqual({ code: "internal_error",message: "The operation could not be completed" });
     await env.DB.prepare("ALTER TABLE inquiries_unavailable RENAME TO inquiries").run();

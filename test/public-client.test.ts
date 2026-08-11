@@ -11,6 +11,9 @@ describe("static website inquiry integration seam",() => {
     await expect(submitInquiryWithConfig(submission,"client-disabled-0001",{ apiUrl:"",enabled:false })).rejects.toThrow("not configured");
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(0);
   });
+  it("sanitizes browser network exceptions",async () => {
+    await expect(submitInquiryWithConfig(submission,"client-network-0001",{apiUrl:"https://api.example.test",enabled:true},async()=>{throw new TypeError("NetworkError when attempting to fetch resource.");})).rejects.toThrow("We couldn't send your inquiry. Please try again. Your information has been kept on this page.");
+  });
   it("persists through the configured client-to-Worker contract",async () => {
     const result = await submitInquiryWithConfig(
       submission,"client-enabled-0001",{ apiUrl:"https://operations.example.test",enabled:true },
