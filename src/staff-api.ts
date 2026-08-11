@@ -4,7 +4,8 @@ import { assessScheduling,type SchedulingWindow } from "./scheduling";
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const workflowStates = new Set(["new","reviewing","qualified","quoted","won","lost","archived"]);
 
-export async function handleStaffApi(request: Request,env: Env,path: string,capacity: number): Promise<Response|null> {
+export async function handleStaffApi(request: Request,env: Env,path: string,capacity: number,actor: import("./auth").StaffIdentity): Promise<Response|null> {
+  if (path === "/v1/internal/me" && request.method === "GET") return currentUser(env.DB,actor,new Date().toISOString());
   if (request.method !== "GET") return null;
   const url = new URL(request.url);
   if (path === "/v1/internal/responders") return listResponders(env.DB,new Date().toISOString());
@@ -16,7 +17,7 @@ export async function handleStaffApi(request: Request,env: Env,path: string,capa
 }
 
 async function listResponders(db: D1Database,now: string) {
-  const result = await db.prepare(`SELECT r.id,r.display_label,r.active,p.available,p.heartbeat_at,p.expires_at,
+  const result = await db.prepare(`SELECT r.id,r.display_label,r.active,r.role,p.available,p.heartbeat_at,p.expires_at,
     CASE WHEN r.active=1 AND p.available=1 AND p.expires_at>? THEN 1 ELSE 0 END AS currently_available
     FROM responders r LEFT JOIN responder_presence p ON p.responder_id=r.id
     WHERE r.active=1 ORDER BY r.display_label`).bind(now).all();
@@ -119,3 +120,9 @@ function bounded(value: string|null,max: number) { return value?.trim().slice(0,
 function clampInteger(value: string|null,min: number,max: number,fallback: number) { const parsed=Number(value);return Number.isInteger(parsed)&&parsed>=min&&parsed<=max?parsed:fallback; }
 function positiveInteger(value: string|undefined,fallback: number) { const parsed=Number(value);return Number.isInteger(parsed)&&parsed>0?parsed:fallback; }
 function invalid(message: string) { return Response.json({ ok:false,error:{ code:"validation_error",message } },{ status:422 }); }
+
+async function currentUser(db:D1Database,actor:import("./auth").StaffIdentity,now:string){
+  const presence=await db.prepare("SELECT available,heartbeat_at,expires_at FROM responder_presence WHERE responder_id=?").bind(actor.id).first<Record<string,unknown>>();
+  const available=Number(presence?.available)===1&&typeof presence?.expires_at==="string"&&presence.expires_at>now;
+  return Response.json({ok:true,user:{id:actor.id,displayName:actor.displayName,role:actor.role,verifiedEmail:actor.verifiedEmail,authMode:actor.authMode,availabilityState:available?"available":"unavailable"}});
+}

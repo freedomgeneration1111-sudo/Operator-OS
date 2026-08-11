@@ -54,13 +54,13 @@ describe("POST /v1/inquiries",() => {
 describe("chat status and responder presence",() => {
   const status = () => SELF.fetch("https://operations.example.test/v1/chat/status");
   const heartbeat = (responderId: string,available: boolean,token = "development-test-token-00000000") => SELF.fetch("https://operations.example.test/v1/internal/presence/heartbeat",{
-    method: "POST",headers: { "Content-Type": "application/json",Authorization: `Bearer ${token}` },body: JSON.stringify({ responderId,available }),
+    method: "POST",headers: { "Content-Type": "application/json",Authorization: `Bearer ${token}`,"X-Development-Responder-Id": responderId },body: JSON.stringify({ available }),
   });
   it("returns async with no current responder",async () => expect((await status()).json()).resolves.toMatchObject({ state: "async",label: "Send us a DM" }));
   it("returns live with one or multiple current responders",async () => {
     expect((await heartbeat("responder-test",true)).status).toBe(200);
     expect((await status()).json()).resolves.toMatchObject({ state: "live",label: "Live Chat" });
-    await env.DB.prepare("INSERT INTO responders VALUES (?,?,?,?,?)").bind("responder-two","Second synthetic responder",1,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z").run();
+    await env.DB.prepare("INSERT INTO responders (id,display_label,active,created_at,updated_at) VALUES (?,?,?,?,?)").bind("responder-two","Second synthetic responder",1,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z").run();
     await heartbeat("responder-two",true);
     expect((await status()).json()).resolves.toMatchObject({ state: "live" });
   });
@@ -80,7 +80,7 @@ describe("chat status and responder presence",() => {
 
 describe("protected CRM API and database integrity",() => {
   it("applies migrations and enforces foreign keys",async () => {
-    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(2);
     await expect(env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("missing","Photo").run()).rejects.toThrow();
   });
   it("does not expose CRM enumeration publicly",async () => {
@@ -91,7 +91,7 @@ describe("protected CRM API and database integrity",() => {
   it("supports protected list and detail endpoints",async () => {
     const created = await SELF.fetch(inquiryRequest(validInquiry,"crm-list-key-00001"));
     const id = (await created.json<{ inquiryId: string }>()).inquiryId;
-    const headers = { Authorization: "Bearer development-test-token-00000000" };
+    const headers = { Authorization: "Bearer development-test-token-00000000","X-Development-Responder-Id": "responder-test" };
     expect((await SELF.fetch("https://operations.example.test/v1/internal/inquiries",{ headers })).status).toBe(200);
     const detail = await SELF.fetch(`https://operations.example.test/v1/internal/inquiries/${id}`,{ headers });
     expect(detail.status).toBe(200);

@@ -3,6 +3,9 @@ INSERT OR IGNORE INTO responders (id,display_label,active,created_at,updated_at)
 ('rsp_dev_a','Test Responder A',1,'2026-08-01T16:00:00.000Z','2026-08-01T16:00:00.000Z'),
 ('rsp_dev_b','Test Responder B',1,'2026-08-01T16:00:00.000Z','2026-08-01T16:00:00.000Z'),
 ('rsp_dev_c','Test Responder C',1,'2026-08-01T16:00:00.000Z','2026-08-01T16:00:00.000Z');
+UPDATE responders SET verified_email="responder-a@example.test",role="responder" WHERE id="rsp_dev_a";
+UPDATE responders SET verified_email="manager-b@example.test",role="manager" WHERE id="rsp_dev_b";
+UPDATE responders SET verified_email="admin-c@example.test",role="admin" WHERE id="rsp_dev_c";
 
 INSERT OR IGNORE INTO contacts (id,full_name,email,phone,preferred_contact,created_at,updated_at) VALUES
 ('con_demo_wedding','Synthetic Wedding Customer','wedding.customer@example.test',NULL,'email','2026-08-08T17:00:00.000Z','2026-08-08T17:00:00.000Z'),

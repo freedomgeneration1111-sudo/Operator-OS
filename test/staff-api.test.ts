@@ -2,34 +2,38 @@ import { env,exports } from "cloudflare:workers";
 import { beforeEach,describe,expect,it } from "vitest";
 
 const token="development-test-token-00000000";
-const auth={ Authorization:`Bearer ${token}` };
 const responderA="rsp_staff_a";
 const responderB="rsp_staff_b";
+const auth={ Authorization:`Bearer ${token}`,"X-Development-Responder-Id":responderA };
 async function api(path:string,init:RequestInit={}){return exports.default.fetch(new Request(`https://operations.example.test${path}`,{...init,headers:{...auth,"Content-Type":"application/json",...init.headers}}));}
 
 beforeEach(async()=>{
   const now="2026-08-10T12:00:00.000Z";
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO responders VALUES (?,?,?,?,?)").bind(responderA,"Test Responder A",1,now,now),
-    env.DB.prepare("INSERT INTO responders VALUES (?,?,?,?,?)").bind(responderB,"Test Responder B",1,now,now),
+    env.DB.prepare("INSERT INTO responders (id,display_label,active,created_at,updated_at) VALUES (?,?,?,?,?)").bind(responderA,"Test Responder A",1,now,now),
+    env.DB.prepare("INSERT INTO responders (id,display_label,active,created_at,updated_at) VALUES (?,?,?,?,?)").bind(responderB,"Test Responder B",1,now,now),
     env.DB.prepare("INSERT INTO contacts VALUES (?,?,?,?,?,?,?)").bind("con_staff","Synthetic Staff Test","staff.customer@example.test",null,"email",now,now),
     env.DB.prepare("INSERT INTO events VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind("evt_staff","Wedding","2027-06-10","2027-06-10","18:00","22:00","Synthetic Venue",100,0,"requested",now,now),
     env.DB.prepare("INSERT INTO inquiries VALUES (?,?,?,?,?,?,?,?,?,?)").bind("inq_staff","con_staff","evt_staff","test","new",null,"Synthetic note","staff-api-idempotency",now,now),
     env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("inq_staff","Photo"),
   ]);
+  await env.DB.prepare("UPDATE responders SET role='manager' WHERE id=?").bind(responderB).run();
 });
 
 describe("protected staff read API",()=>{
   it("rejects responder listing without authentication",async()=>expect((await exports.default.fetch(new Request("https://operations.example.test/v1/internal/responders"))).status).toBe(401));
+
+  it("returns identity-derived current user context",async()=>{const body=await (await api("/v1/internal/me")).json<{user:{id:string;role:string;authMode:string}}>();expect(body.user).toMatchObject({id:responderA,role:"responder",authMode:"development"});});
   it("lists only internal active responders",async()=>{const response=await api("/v1/internal/responders");expect(response.status).toBe(200);const body=await response.json<{responders:Array<{id:string}>}>();expect(body.responders.map((item)=>item.id)).toEqual([responderA,responderB]);});
+  it("rejects client-selected presence and audit actors",async()=>{expect((await api("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({responderId:responderB,available:true})})).status).toBe(422);expect((await api("/v1/internal/inquiries/inq_staff/notes",{method:"POST",body:JSON.stringify({body:"Synthetic",actorId:responderB})})).status).toBe(422);});
   it("lists active presence internally and supports explicit unavailable",async()=>{
-    expect((await api("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({responderId:responderA,available:true})})).status).toBe(200);
+    expect((await api("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({available:true})})).status).toBe(200);
     let body=await (await api("/v1/internal/status")).json<{activeResponders:Array<{id:string}>}>();expect(body.activeResponders.map((item)=>item.id)).toContain(responderA);
-    await api("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({responderId:responderA,available:false})});
+    await api("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({available:false})});
     body=await (await api("/v1/internal/status")).json();expect(body.activeResponders).toHaveLength(0);
   });
   it("returns bounded inbox search, assignment and workflow filters",async()=>{
-    await api("/v1/internal/inquiries/inq_staff/assignment",{method:"PATCH",body:JSON.stringify({responderId:responderA,assigned:true,actorId:responderA})});
+    await api("/v1/internal/inquiries/inq_staff/assignment",{method:"PATCH",body:JSON.stringify({responderId:responderA,assigned:true})});
     const body=await (await api(`/v1/internal/inbox?query=Venue&workflow=new&assignment=${responderA}&limit=10`)).json<{inquiries:Array<{id:string;services:string}>;page:{total:number}}>();
     expect(body.inquiries).toHaveLength(1);expect(body.inquiries[0]).toMatchObject({id:"inq_staff",services:"Photo"});expect(body.page.total).toBe(1);
   });
@@ -39,14 +43,23 @@ describe("protected staff read API",()=>{
 
 describe("staff CRM mutations",()=>{
   it("assigns, changes workflow, adds an internal note and records audit history",async()=>{
-    expect((await api("/v1/internal/inquiries/inq_staff/assignment",{method:"PATCH",body:JSON.stringify({responderId:responderA,assigned:true,actorId:responderA})})).status).toBe(200);
-    expect((await api("/v1/internal/inquiries/inq_staff/workflow",{method:"PATCH",body:JSON.stringify({state:"reviewing",actorId:responderA})})).status).toBe(200);
-    expect((await api("/v1/internal/inquiries/inq_staff/notes",{method:"POST",body:JSON.stringify({body:"Synthetic internal staff note",actorId:responderA})})).status).toBe(201);
+    expect((await api("/v1/internal/inquiries/inq_staff/assignment",{method:"PATCH",body:JSON.stringify({responderId:responderA,assigned:true})})).status).toBe(200);
+    expect((await api("/v1/internal/inquiries/inq_staff/workflow",{method:"PATCH",body:JSON.stringify({state:"reviewing"})})).status).toBe(200);
+    expect((await api("/v1/internal/inquiries/inq_staff/notes",{method:"POST",body:JSON.stringify({body:"Synthetic internal staff note"})})).status).toBe(201);
     const detail=await (await api("/v1/internal/inquiries/inq_staff")).json<{assignments:unknown[];notes:Array<{author_label:string;body:string}>;activities:Array<{activity_type:string}>}>();
     expect(detail.assignments).toHaveLength(1);expect(detail.notes[0]).toMatchObject({author_label:"Test Responder A",body:"Synthetic internal staff note"});expect(detail.activities.map((item)=>item.activity_type)).toEqual(expect.arrayContaining(["responder_assigned","workflow_changed","internal_note_added"]));
   });
+
+  it("enforces responder versus manager permissions and records the authenticated actor",async()=>{
+    expect((await api("/v1/internal/inquiries/inq_staff/capacity",{method:"PATCH",body:JSON.stringify({blocksCapacity:true})})).status).toBe(403);
+    const managerHeaders={Authorization:`Bearer ${token}`,"X-Development-Responder-Id":responderB,"Content-Type":"application/json"};
+    expect((await exports.default.fetch(new Request("https://operations.example.test/v1/internal/inquiries/inq_staff/capacity",{method:"PATCH",headers:managerHeaders,body:JSON.stringify({blocksCapacity:true})}))).status).toBe(200);
+    expect((await api("/v1/internal/inquiries/inq_staff/assignment",{method:"PATCH",body:JSON.stringify({responderId:responderB,assigned:true})})).status).toBe(403);
+    await api("/v1/internal/inquiries/inq_staff/notes",{method:"POST",body:JSON.stringify({body:"Actor identity audit"})});
+    expect(await env.DB.prepare("SELECT actor_id FROM activities WHERE activity_type='internal_note_added' ORDER BY created_at DESC LIMIT 1").first<string>("actor_id")).toBe(responderA);
+  });
   it("rejects invalid inquiry IDs and unauthenticated mutations",async()=>{
-    expect((await api("/v1/internal/inquiries/missing/workflow",{method:"PATCH",body:JSON.stringify({state:"reviewing",actorId:responderA})})).status).toBe(404);
+    expect((await api("/v1/internal/inquiries/missing/workflow",{method:"PATCH",body:JSON.stringify({state:"reviewing"})})).status).toBe(404);
     const response=await exports.default.fetch(new Request("https://operations.example.test/v1/internal/inquiries/inq_staff/workflow",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({state:"reviewing"})}));expect(response.status).toBe(401);
   });
 });
