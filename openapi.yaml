@@ -30,7 +30,7 @@ paths:
         '500': { $ref: '#/components/responses/Error' }
   /v1/chat/status:
     get:
-      summary: Resolve provider-neutral customer messaging state
+      summary: Resolve native website chat state from confirmed responder presence
       responses:
         '200':
           description: Current public status
@@ -44,6 +44,50 @@ paths:
                   label: { type: string }
                   destinationUrl: { type: [string,'null'], format: uri }
                   checkedAt: { type: string, format: date-time }
+  /v1/chat/conversations:
+    post:
+      summary: Start a native website conversation and persist its first message
+      responses:
+        '201': { description: Conversation created; resume token is returned once }
+        '400': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /v1/chat/conversations/{conversationId}/messages:
+    get:
+      summary: Resume public conversation history with its secret token
+      responses: { '200': { description: Public-safe ordered message history }, '403': { $ref: '#/components/responses/Error' } }
+    post:
+      summary: Persist a customer message with its secret token
+      responses: { '201': { description: Persisted or idempotently replayed }, '403': { $ref: '#/components/responses/Error' }, '429': { $ref: '#/components/responses/Error' } }
+  /v1/chat/conversations/{conversationId}/socket:
+    get:
+      summary: Upgrade an authorized customer connection to a conversation WebSocket
+      responses: { '101': { description: WebSocket upgrade }, '403': { $ref: '#/components/responses/Error' } }
+  /v1/internal/chat/socket:
+    get:
+      summary: Upgrade authenticated staff to the routed chat-event WebSocket
+      security: [{ accessAssertion: [] }]
+      responses: { '101': { description: WebSocket upgrade }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/conversations/{conversationId}:
+    get:
+      summary: Read internal conversation, messages, customer context and activity
+      security: [{ accessAssertion: [] }]
+      responses: { '200': { description: Internal conversation detail }, '401': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } }
+  /v1/internal/conversations/{conversationId}/messages:
+    post:
+      summary: Persist an authenticated responder reply
+      security: [{ accessAssertion: [] }]
+      responses: { '201': { description: Reply persisted with audit actor }, '401': { $ref: '#/components/responses/Error' } }
+  /v1/internal/conversations/{conversationId}/assignment:
+    patch:
+      summary: Assign or unassign a conversation
+      security: [{ accessAssertion: [] }]
+      responses: { '200': { description: Assignment updated and audited }, '401': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' } }
+  /v1/internal/conversations/{conversationId}/read:
+    post:
+      summary: Advance the authenticated responder read position
+      security: [{ accessAssertion: [] }]
+      responses: { '200': { description: Read position updated }, '401': { $ref: '#/components/responses/Error' } }
   /v1/internal/presence/heartbeat:
     post:
       summary: Set and refresh explicit responder availability
@@ -139,7 +183,7 @@ paths:
         - { in: query, name: state, schema: { type: string, default: all } }
       responses: { "200": { description: Range events and assessments }, "401": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
   /v1/internal/conversations:
-    get: { summary: List provider-neutral conversation metadata, security: [{ accessAssertion: [] }], responses: { "200": { description: Conversation metadata }, "401": { $ref: "#/components/responses/Error" } } }
+    get: { summary: List provider-neutral conversations with native unread counts, security: [{ accessAssertion: [] }], responses: { "200": { description: Conversation metadata }, "401": { $ref: "#/components/responses/Error" } } }
   /v1/internal/me:
     get:
       summary: Resolve the authenticated staff identity and application role
