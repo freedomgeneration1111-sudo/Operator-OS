@@ -1,0 +1,15 @@
+import {expect,test,type Page,type Route} from "@playwright/test";
+test.use({baseURL:"http://127.0.0.1:5174"});
+const user={id:"rsp_access",displayName:"Access Staff",role:"manager",verifiedEmail:"staff@example.test",authMode:"access",availabilityState:"unavailable"};
+const status={ok:true,chat:{state:"unavailable",label:"Messaging unavailable",destinationUrl:null,checkedAt:"2026-08-10T00:00:00Z"},activeResponders:[],messaging:{configured:false,provider:null},presenceTimeoutSeconds:120,eventCapacity:1};
+function json(route:Route,statusCode:number,body:unknown){return route.fulfill({status:statusCode,contentType:"application/json",body:JSON.stringify(body)});}
+
+test("production uses Access session bootstrap and never requests a pasted token",async({page})=>{await page.route("**/v1/internal/me",(route)=>json(route,401,{ok:false,error:{code:"authentication_required",message:"Access required"}}));await page.goto("/");await expect(page.getByRole("heading",{name:"Sign in required"})).toBeVisible();await expect(page.getByLabel("Development API token")).toHaveCount(0);await expect(page.getByRole("link",{name:"Sign in again"})).toHaveAttribute("href",/\/cdn-cgi\/access\/login/);});
+
+test("authenticated current responder and role load automatically",async({page})=>{await successfulSession(page);await page.goto("/");await expect(page.getByRole("heading",{name:"Inquiry Inbox"})).toBeVisible();await expect(page.getByText("Access Staff · manager")).toBeVisible();await expect(page.getByLabel("Development API token")).toHaveCount(0);});
+
+test("inactive staff receives an explicit denied state",async({page})=>{await page.route("**/v1/internal/me",(route)=>json(route,403,{ok:false,error:{code:"staff_inactive",message:"Inactive"}}));await page.goto("/");await expect(page.getByText("Your Focus Lab staff access is inactive.")).toBeVisible();});
+
+test("an expired API session stops the workspace and offers reauthentication",async({page})=>{await page.route("**/v1/internal/me",(route)=>json(route,200,{ok:true,user}));await page.route("**/v1/internal/responders",(route)=>json(route,200,{ok:true,responders:[]}));await page.route("**/v1/internal/status",(route)=>json(route,200,status));await page.route("**/v1/internal/inbox?*",(route)=>json(route,401,{ok:false,error:{code:"authentication_required",message:"Expired"}}));await page.goto("/");await expect(page.getByRole("heading",{name:"Sign in required"})).toBeVisible();await expect(page.getByText(/expired or was revoked/)).toBeVisible();});
+
+async function successfulSession(page:Page){await page.route("**/v1/internal/me",(route)=>json(route,200,{ok:true,user}));await page.route("**/v1/internal/responders",(route)=>json(route,200,{ok:true,responders:[{id:user.id,display_label:user.displayName,role:user.role,active:1,currently_available:0,heartbeat_at:null,expires_at:null}]}));await page.route("**/v1/internal/status",(route)=>json(route,200,status));await page.route("**/v1/internal/inbox?*",(route)=>json(route,200,{ok:true,inquiries:[],page:{limit:25,offset:0,total:0,hasMore:false}}));}

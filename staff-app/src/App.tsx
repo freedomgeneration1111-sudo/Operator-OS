@@ -14,7 +14,7 @@ import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
 
 export default function App(){return <SessionProvider><SessionGate/></SessionProvider>;}
-function SessionGate(){const {session}=useSession();return session?<OperationsWorkspace/>:<DevLogin/>;}
+function SessionGate(){const {session,developmentAuthAllowed,loading,authError,retry}=useSession();if(session)return <OperationsWorkspace/>;if(developmentAuthAllowed)return <DevLogin/>;if(loading)return <Loading label="Verifying secure staff session…"/>;return <main className="login-shell"><section className="login-card"><p className="eyebrow">Secure Staff Access</p><h1>Sign in required</h1><p role="alert">{authError||"Cloudflare Access authentication is required."}</p><a className="button primary" href={`/cdn-cgi/access/login?redirect_url=${encodeURIComponent(window.location.href)}`}>Sign in again</a><button className="button text" onClick={retry}>Retry session check</button></section></main>;}
 function OperationsWorkspace(){
   const {session,logout}=useSession();if(!session)throw new Error("Session required");
   const route=useHashRoute();const online=useOnline();const [responders,setResponders]=useState<Responder[]>([]);const [status,setStatus]=useState<OperationsStatus|null>(null);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [refresh,setRefresh]=useState(0);
@@ -33,5 +33,5 @@ function OperationsWorkspace(){
   else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   else if(route.startsWith("/settings"))content=<SettingsView status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
   else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
-  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={session.responder.display_label} onLogout={()=>void endSession()}>{content}</Shell>;
+  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()}>{content}</Shell>;
 }
