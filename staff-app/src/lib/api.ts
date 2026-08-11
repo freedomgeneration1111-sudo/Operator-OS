@@ -1,4 +1,4 @@
-import type { Assessment,Conversation,InboxResponse,InquiryDetail,OperationsStatus,Responder,ScheduleEvent,StaffUser,WorkflowState } from "./types";
+import type { Assessment,Conversation,ConversationDetail,InboxResponse,InquiryDetail,OperationsStatus,Responder,ScheduleEvent,StaffUser,WorkflowState } from "./types";
 export class ApiError extends Error{constructor(message:string,readonly status:number,readonly code?:string){super(message);}}
 type DevelopmentAuth={token:string;responderId?:string};
 export class OperationsClient{
@@ -12,6 +12,11 @@ export class OperationsClient{
   conflicts(id:string){return this.request<{ok:true;assessment:Assessment}>(`/v1/internal/inquiries/${encodeURIComponent(id)}/conflicts`);}
   schedule(start:string,end:string,state="all"){return this.request<{ok:true;range:{start:string;end:string};capacity:number;events:ScheduleEvent[]}>(`/v1/internal/schedule?start=${start}&end=${end}&state=${encodeURIComponent(state)}`);}
   conversations(query=""){return this.request<{ok:true;conversations:Conversation[]}>(`/v1/internal/conversations${query?`?query=${encodeURIComponent(query)}`:""}`);}
+  conversation(id:string){return this.request<ConversationDetail>(`/v1/internal/conversations/${encodeURIComponent(id)}`);}
+  reply(id:string,body:string,clientMessageId=crypto.randomUUID()){return this.request<{ok:true;message:unknown}>(`/v1/internal/conversations/${encodeURIComponent(id)}/messages`,{method:"POST",body:JSON.stringify({body,clientMessageId})});}
+  conversationAssignment(id:string,responderId:string|null){return this.request(`/v1/internal/conversations/${encodeURIComponent(id)}/assignment`,{method:"PATCH",body:JSON.stringify({responderId})});}
+  markConversationRead(id:string){return this.request(`/v1/internal/conversations/${encodeURIComponent(id)}/read`,{method:"POST"});}
+  chatEventsSocket(){const base=this.baseUrl||window.location.origin;const url=new URL(`/v1/internal/chat/socket`,base);url.protocol=url.protocol==="https:"?"wss:":"ws:";return new WebSocket(url);}
   workflow(id:string,state:WorkflowState){return this.request(`/v1/internal/inquiries/${encodeURIComponent(id)}/workflow`,{method:"PATCH",body:JSON.stringify({state})});}
   note(id:string,body:string){return this.request(`/v1/internal/inquiries/${encodeURIComponent(id)}/notes`,{method:"POST",body:JSON.stringify({body})});}
   assignment(id:string,responderId:string,assigned:boolean){return this.request(`/v1/internal/inquiries/${encodeURIComponent(id)}/assignment`,{method:"PATCH",body:JSON.stringify({responderId,assigned})});}

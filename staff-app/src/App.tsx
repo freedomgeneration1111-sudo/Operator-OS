@@ -29,7 +29,7 @@ function OperationsWorkspace(){
   let content;
   if(detailMatch)content=<InquiryDetailView client={session.client} id={decodeURIComponent(detailMatch[1]!)} responders={responders} currentResponderId={session.responder.id} online={online}/>;
   else if(route.startsWith("/schedule"))content=<ScheduleView client={session.client}/>;
-  else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status}/>;
+  else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status} currentResponderId={session.responder.id}/>;
   else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   else if(route.startsWith("/settings"))content=<SettingsView status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
   else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
