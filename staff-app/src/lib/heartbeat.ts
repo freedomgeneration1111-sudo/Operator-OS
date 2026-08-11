@@ -1,4 +1,12 @@
 export type HeartbeatState="off"|"starting"|"live"|"degraded"|"stopping";
+export type PresencePresentation={label:string;detail:string;confirmedLive:boolean};
+export function presencePresentation(enabled:boolean,state:HeartbeatState):PresencePresentation{
+  if(!enabled)return{label:"Not available",detail:"Tap to become available",confirmedLive:false};
+  if(state==="stopping")return{label:"Disconnecting…",detail:"Waiting for server confirmation",confirmedLive:false};
+  if(state==="live")return{label:"Available / Live",detail:"Server heartbeat confirmed",confirmedLive:true};
+  if(state==="degraded")return{label:"Connection lost / Not currently live",detail:"Heartbeat failed; server expiry remains authoritative",confirmedLive:false};
+  return{label:"Connecting…",detail:"Waiting for server heartbeat confirmation",confirmedLive:false};
+}
 export class HeartbeatController{
   private interval:number|null=null;
   private running=false;

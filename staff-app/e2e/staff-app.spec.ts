@@ -4,7 +4,7 @@ const responder={ id:"responder_test_a",display_label:"Test Responder A",active:
 const inquiry={ id:"inq_test_wedding",workflow_state:"new",source_channel:"website",created_at:"2026-08-10T17:00:00Z",updated_at:"2026-08-10T17:00:00Z",full_name:"Synthetic Wedding Customer",event_id:"evt_test_wedding",event_family:"Wedding",start_date:"2026-09-12",end_date:null,start_time:null,end_time:null,venue_location:"Synthetic Garden Venue",blocks_capacity:0,scheduling_state:"tentative",services:"DJ|Photography",assignee_labels:null,assignee_ids:null };
 const assessment={ status:"review_required",capacity:1,blockingOverlapCount:0,conflicts:[] };
 
-async function mockApi(page:Page,options:{ mutationFailure?:boolean }={}){
+async function mockApi(page:Page,options:{ mutationFailure?:boolean;heartbeatDelayMs?:number }={}){
   const calls:string[]=[];
   await page.route("http://127.0.0.1:8787/**",async(route:Route)=>{
     const request=route.request();const url=new URL(request.url());calls.push(`${request.method()} ${url.pathname}`);
@@ -22,6 +22,7 @@ async function mockApi(page:Page,options:{ mutationFailure?:boolean }={}){
     if(url.pathname.endsWith("/conflicts"))return json(route,200,{ ok:true,assessment });
     if(url.pathname==="/v1/internal/presence/heartbeat"){
       const body=request.postDataJSON() as { available:boolean };
+      if(options.heartbeatDelayMs)await new Promise((resolve)=>setTimeout(resolve,options.heartbeatDelayMs));
       return json(route,200,{ ok:true,state:body.available?"available":"unavailable",expiresAt:"2026-08-10T17:02:00Z" });
     }
     return json(route,200,{ ok:true });
@@ -57,12 +58,13 @@ test("inbox, search, detail, assignment, note, and scheduling status work",async
 });
 
 test("availability starts a heartbeat, updates status, and stops explicitly",async({ page })=>{
-  const calls=await mockApi(page);await login(page);
+  const calls=await mockApi(page,{heartbeatDelayMs:250});await login(page);
   await page.getByRole("link",{ name:/Status/ }).click();
-  await page.getByRole("button",{ name:/Not Available/ }).click();
-  await expect(page.getByText("Available for Live Chat").first()).toBeVisible();
-  await page.getByRole("button",{ name:/Available for Live Chat/ }).click();
-  await expect(page.getByText("Not Available").first()).toBeVisible();
+  await page.getByRole("button",{ name:/Not available/ }).click();
+  await expect(page.getByText("Connecting…").first()).toBeVisible();
+  await expect(page.getByText("Available / Live").first()).toBeVisible();
+  await page.getByRole("button",{ name:/Available \/ Live/ }).click();
+  await expect(page.getByText("Not available").first()).toBeVisible();
   expect(calls.filter((call)=>call==="POST /v1/internal/presence/heartbeat")).toHaveLength(2);
 });
 
