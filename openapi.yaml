@@ -45,7 +45,7 @@ paths:
   /v1/internal/presence/heartbeat:
     post:
       summary: Set and refresh explicit responder availability
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       requestBody:
         required: true
         content:
@@ -53,9 +53,8 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [responderId,available]
+              required: [available]
               properties:
-                responderId: { type: string }
                 available: { type: boolean }
       responses:
         '200': { description: Presence updated }
@@ -64,7 +63,7 @@ paths:
   /v1/internal/inquiries:
     get:
       summary: List or search inquiries
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters:
         - in: query
           name: query
@@ -75,7 +74,7 @@ paths:
   /v1/internal/inquiries/{inquiryId}:
     get:
       summary: Read inquiry, event, contact, services, notes, assignments, activity and conversation metadata
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses:
         '200': { description: Internal detail }
@@ -84,41 +83,41 @@ paths:
   /v1/internal/inquiries/{inquiryId}/workflow:
     patch:
       summary: Update internal workflow state
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
   /v1/internal/inquiries/{inquiryId}/notes:
     post:
       summary: Add an internal-only note
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses: { '201': { description: Created }, '401': { $ref: '#/components/responses/Error' } }
   /v1/internal/inquiries/{inquiryId}/assignment:
     patch:
       summary: Assign or unassign a responder
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
   /v1/internal/inquiries/{inquiryId}/capacity:
     patch:
       summary: Set explicit event capacity blocking
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
   /v1/internal/inquiries/{inquiryId}/conflicts:
     get:
       summary: Get internal scheduling decision support
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses: { '200': { description: Scheduling assessment }, '401': { $ref: '#/components/responses/Error' } }
   /v1/internal/responders:
-    get: { summary: List active internal responders and presence, security: [{ provisionalBearer: [] }], responses: { "200": { description: Active responders }, "401": { $ref: "#/components/responses/Error" } } }
+    get: { summary: List active internal responders and presence, security: [{ accessAssertion: [] }], responses: { "200": { description: Active responders }, "401": { $ref: "#/components/responses/Error" } } }
   /v1/internal/status:
-    get: { summary: Read aggregate operational status, security: [{ provisionalBearer: [] }], responses: { "200": { description: Internal status }, "401": { $ref: "#/components/responses/Error" } } }
+    get: { summary: Read aggregate operational status, security: [{ accessAssertion: [] }], responses: { "200": { description: Internal status }, "401": { $ref: "#/components/responses/Error" } } }
   /v1/internal/inbox:
     get:
       summary: Read the bounded filtered staff inbox
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters:
         - { in: query, name: query, schema: { type: string, maxLength: 120 } }
         - { in: query, name: workflow, schema: { type: string } }
@@ -131,20 +130,30 @@ paths:
   /v1/internal/schedule:
     get:
       summary: Read an event range with scheduling assessments
-      security: [{ provisionalBearer: [] }]
+      security: [{ accessAssertion: [] }]
       parameters:
         - { in: query, name: start, required: true, schema: { type: string, format: date } }
         - { in: query, name: end, required: true, schema: { type: string, format: date } }
         - { in: query, name: state, schema: { type: string, default: all } }
       responses: { "200": { description: Range events and assessments }, "401": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
   /v1/internal/conversations:
-    get: { summary: List provider-neutral conversation metadata, security: [{ provisionalBearer: [] }], responses: { "200": { description: Conversation metadata }, "401": { $ref: "#/components/responses/Error" } } }
+    get: { summary: List provider-neutral conversation metadata, security: [{ accessAssertion: [] }], responses: { "200": { description: Conversation metadata }, "401": { $ref: "#/components/responses/Error" } } }
+  /v1/internal/me:
+    get:
+      summary: Resolve the authenticated staff identity and application role
+      security: [{ accessAssertion: [] }]
+      responses:
+        '200': { description: Minimal current-user context }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
-    provisionalBearer:
-      type: http
-      scheme: bearer
-      description: Development boundary only; production staff identity is unresolved.
+    accessAssertion:
+      type: apiKey
+      in: header
+      name: Cf-Access-Jwt-Assertion
+      description: Production requires a validated Cloudflare Access application JWT plus active D1 staff authorization. Explicit local development mode uses a separate bearer-token adapter.
   parameters:
     InquiryId: { in: path, name: inquiryId, required: true, schema: { type: string } }
   responses:
