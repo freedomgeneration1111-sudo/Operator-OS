@@ -5,10 +5,10 @@ import { beforeEach,describe,expect,it } from "vitest";
 const validInquiry = {
   eventType: "Wedding",date: "2027-06-10",location: "Dallas, TX",services: ["Photo","Video"],
   guests: "150",budget: "Not sure yet",name: "Synthetic Customer",email: "synthetic@example.test",
-  phone: "",contact: "email",note: "Synthetic test inquiry",
+  phone: "",contact: "email",note: "Synthetic test inquiry",turnstileToken:"test-turnstile-pass",website:"",
 };
 const inquiryRequest = (body: unknown,key = "test-key-00000001") => new Request("https://operations.example.test/v1/inquiries",{
-  method: "POST",headers: { "Content-Type": "application/json","Idempotency-Key": key },body: JSON.stringify(body),
+  method: "POST",headers: { "Content-Type": "application/json","Idempotency-Key": key,"CF-Connecting-IP": `192.0.2.${Math.abs([...key].reduce((sum,char)=>sum+char.charCodeAt(0),0))%250+1}` },body: JSON.stringify(body),
 });
 
 beforeEach(async () => {
@@ -28,6 +28,9 @@ describe("POST /v1/inquiries",() => {
   });
   it("rejects missing required fields",async () => expect((await SELF.fetch(inquiryRequest({ name: "Only name" }))).status).toBe(422));
   it("rejects malformed fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,email: "not-email" }))).status).toBe(422));
+  it("rejects a missing Turnstile token",async () => { const body={...validInquiry,turnstileToken:undefined};expect((await SELF.fetch(inquiryRequest(body,"missing-turnstile-01"))).status).toBe(422); });
+  it("rejects an invalid Turnstile token",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,turnstileToken:"invalid" },"invalid-turnstile-01"))).status).toBe(400));
+  it("rejects a honeypot hit without persistence",async () => { const response=await SELF.fetch(inquiryRequest({ ...validInquiry,website:"spam.example" },"honeypot-key-00001"));expect(response.status).toBe(400);expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(0); });
   it("rejects unexpected fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,isAdmin: true }))).status).toBe(422));
   it("deduplicates retries by idempotency key",async () => {
     expect((await SELF.fetch(inquiryRequest(validInquiry,"repeat-key-00000001"))).status).toBe(201);

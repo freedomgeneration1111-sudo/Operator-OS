@@ -5,7 +5,7 @@ import { submitInquiryWithConfig } from "../../lib/operations-api";
 describe("static website inquiry integration seam",() => {
   const submission = {
     eventType:"Wedding",date:"2027-09-14",location:"Dallas, TX",services:["Photo"],guests:"80",
-    budget:"",name:"Synthetic Browser Customer",email:"browser@example.test",phone:"",contact:"email",note:"",
+    budget:"",name:"Synthetic Browser Customer",email:"browser@example.test",phone:"",contact:"email",note:"",turnstileToken:"test-turnstile-pass",website:"",
   };
   it("fails truthfully while disabled",async () => {
     await expect(submitInquiryWithConfig(submission,"client-disabled-0001",{ apiUrl:"",enabled:false })).rejects.toThrow("not configured");

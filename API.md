@@ -4,7 +4,7 @@
 
 | Endpoint | Method | Auth | Request | Success |
 |---|---|---|---|---|
-| `/v1/inquiries` | POST | Public; `Idempotency-Key` required | Existing website inquiry fields; strict JSON schema | `201` persisted or `200` idempotent replay; status is `received_for_review`, never availability |
+| `/v1/inquiries` | POST | Public; `Idempotency-Key` required | Existing website inquiry fields, Turnstile token, empty honeypot; strict JSON schema | `201` persisted or `200` idempotent replay; status is `received_for_review`, never availability |
 | `/v1/chat/status` | GET | Public | None | `live`, `async`, or `unavailable`; no internal responder data |
 | `/v1/internal/me` | GET | Access JWT + D1 role | None | Minimal current-user role and availability context |
 | `/v1/internal/presence/heartbeat` | POST | Access JWT + D1 role | `{ available: boolean }` | Presence state and expiry |
@@ -20,6 +20,8 @@
 | `/v1/internal/inbox` | GET | Access JWT + D1 role | Bounded filters and pagination | Staff inbox page, max 50 |
 | `/v1/internal/schedule` | GET | Access JWT + D1 role | Required date range | Events with internal conflict assessments |
 | `/v1/internal/conversations` | GET | Access JWT + D1 role | Optional query | Metadata only; no message bodies |
+
+`POST /v1/inquiries` validates Turnstile with Siteverify, rejects a filled honeypot, and applies the Worker rate-limit binding before persistence. Turnstile secrets never enter the browser. A `429` is retryable after the one-minute window; verification/infrastructure failures fail closed.
 
 All JSON mutation bodies reject unknown fields. Validation failures use `422`; malformed JSON or idempotency metadata uses `400`; missing internal auth uses `401`; missing records use `404`; unexpected persistence failures use a generic `500` without exposing SQL or private data.
 

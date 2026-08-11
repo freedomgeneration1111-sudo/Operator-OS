@@ -13,6 +13,7 @@ export default defineConfig({
           INTERNAL_API_TOKEN: "development-test-token-00000000",
           MESSAGING_PROVIDER: "test-shared-inbox",
           MESSAGING_DESTINATION_URL: "https://messaging.example.test/shared",
+          TURNSTILE_TEST_BYPASS: "true",
         },
       },
     })),

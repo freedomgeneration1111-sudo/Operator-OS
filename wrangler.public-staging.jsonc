@@ -1,0 +1,36 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "focus-lab-api-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "focuslab-crm-staging",
+      "database_id": "9a7e55cb-7b26-4521-b48d-bd607e1b207c",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "INQUIRY_RATE_LIMITER",
+      "namespace_id": "12003",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+  "vars": {
+    "PUBLIC_SITE_ORIGIN": "https://focus-lab-public-staging.freedomgeneration1111.workers.dev",
+    "CONCURRENT_EVENT_CAPACITY": "1",
+    "PRESENCE_TIMEOUT_SECONDS": "120",
+    "ENVIRONMENT": "staging",
+    "STAFF_AUTH_MODE": "access",
+    "STAFF_HOSTNAME": "",
+    "TURNSTILE_EXPECTED_HOSTNAME": "focus-lab-public-staging.freedomgeneration1111.workers.dev"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 }
+  }
+}

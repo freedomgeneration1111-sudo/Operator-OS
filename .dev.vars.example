@@ -4,3 +4,7 @@ INTERNAL_API_TOKEN=replace-with-a-long-random-development-token
 # Leave both unset to make public chat status safely return "unavailable".
 # MESSAGING_PROVIDER=shared-business-inbox
 # MESSAGING_DESTINATION_URL=https://verified-provider.example/destination
+
+# Required for real local inquiry submission. Use an official Cloudflare test
+# secret for automated/local testing only; never reuse it in staging/production.
+# TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA

@@ -24,6 +24,8 @@ paths:
         '200': { description: Idempotent replay, content: { application/json: { schema: { $ref: '#/components/schemas/InquiryCreated' } } } }
         '400': { $ref: '#/components/responses/Error' }
         '413': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
         '500': { $ref: '#/components/responses/Error' }
   /v1/chat/status:
@@ -164,7 +166,7 @@ components:
     InquiryRequest:
       type: object
       additionalProperties: false
-      required: [eventType,date,services,name,email,contact]
+      required: [eventType,date,services,name,email,contact,turnstileToken]
       properties:
         eventType: { type: string, maxLength: 100 }
         date: { type: string, format: date }
@@ -181,6 +183,8 @@ components:
         contact: { enum: [email,phone] }
         note: { type: string, maxLength: 4000 }
         source: { type: string, maxLength: 100 }
+        turnstileToken: { type: string, minLength: 1, maxLength: 2048, description: Short-lived token verified server-side with Cloudflare Siteverify }
+        website: { type: string, maxLength: 300, description: Honeypot; legitimate clients send an empty string }
     InquiryCreated:
       type: object
       required: [ok,inquiryId,eventId,createdAt,idempotentReplay,status,message]
