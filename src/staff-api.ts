@@ -12,7 +12,7 @@ export async function handleStaffApi(request: Request,env: Env,path: string,capa
   if (path === "/v1/internal/status") return operationsStatus(env,new Date().toISOString());
   if (path === "/v1/internal/inbox") return inbox(env.DB,url.searchParams);
   if (path === "/v1/internal/schedule") return schedule(env.DB,url.searchParams,capacity);
-  if (path === "/v1/internal/conversations") return conversations(env.DB,url.searchParams);
+  if (path === "/v1/internal/conversations") return conversations(env.DB,url.searchParams,actor.id);
   return null;
 }
 
@@ -98,17 +98,19 @@ async function schedule(db: D1Database,params: URLSearchParams,capacity: number)
   return Response.json({ ok:true,range:{ start,end },capacity,events });
 }
 
-async function conversations(db: D1Database,params: URLSearchParams) {
+async function conversations(db: D1Database,params: URLSearchParams,responderId: string) {
   const query = bounded(params.get("query"),120);
   const term = query ? `%${query}%` : null;
   const result = term
     ? await db.prepare(`SELECT cv.id,cv.provider,cv.external_conversation_id,cv.channel_state,cv.updated_at,
-        cv.inquiry_id,cv.event_id,c.full_name,e.event_family,e.start_date FROM conversations cv
+        cv.inquiry_id,cv.event_id,cv.assigned_responder_id,cv.last_message_at,c.full_name,e.event_family,e.start_date,
+        (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.conversation_id=cv.id AND cm.sender_kind='customer' AND cm.sequence>COALESCE((SELECT cr.last_read_sequence FROM conversation_reads cr WHERE cr.conversation_id=cv.id AND cr.responder_id=?),0)) AS unread_count FROM conversations cv
         JOIN contacts c ON c.id=cv.contact_id LEFT JOIN events e ON e.id=cv.event_id
-        WHERE c.full_name LIKE ? OR cv.external_conversation_id LIKE ? OR cv.provider LIKE ? ORDER BY cv.updated_at DESC LIMIT 100`).bind(term,term,term).all()
+        WHERE c.full_name LIKE ? OR cv.external_conversation_id LIKE ? OR cv.provider LIKE ? ORDER BY cv.updated_at DESC LIMIT 100`).bind(responderId,term,term,term).all()
     : await db.prepare(`SELECT cv.id,cv.provider,cv.external_conversation_id,cv.channel_state,cv.updated_at,
-        cv.inquiry_id,cv.event_id,c.full_name,e.event_family,e.start_date FROM conversations cv
-        JOIN contacts c ON c.id=cv.contact_id LEFT JOIN events e ON e.id=cv.event_id ORDER BY cv.updated_at DESC LIMIT 100`).all();
+        cv.inquiry_id,cv.event_id,cv.assigned_responder_id,cv.last_message_at,c.full_name,e.event_family,e.start_date,
+        (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.conversation_id=cv.id AND cm.sender_kind='customer' AND cm.sequence>COALESCE((SELECT cr.last_read_sequence FROM conversation_reads cr WHERE cr.conversation_id=cv.id AND cr.responder_id=?),0)) AS unread_count FROM conversations cv
+        JOIN contacts c ON c.id=cv.contact_id LEFT JOIN events e ON e.id=cv.event_id ORDER BY cv.updated_at DESC LIMIT 100`).bind(responderId).all();
   return Response.json({ ok:true,conversations:result.results });
 }
 

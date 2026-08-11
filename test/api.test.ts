@@ -69,31 +69,31 @@ describe("chat status and responder presence",() => {
   const heartbeat = (responderId: string,available: boolean,token = "development-test-token-00000000") => SELF.fetch("https://operations.example.test/v1/internal/presence/heartbeat",{
     method: "POST",headers: { "Content-Type": "application/json",Authorization: `Bearer ${token}`,"X-Development-Responder-Id": responderId },body: JSON.stringify({ available }),
   });
-  it("returns async with no current responder",async () => expect((await status()).json()).resolves.toMatchObject({ state: "async",label: "Send us a DM" }));
+  it("returns async with no current responder",async () => await expect((await status()).json()).resolves.toMatchObject({ state: "async",label: "Send us a Message" }));
   it("returns live with one or multiple current responders",async () => {
     expect((await heartbeat("responder-test",true)).status).toBe(200);
-    expect((await status()).json()).resolves.toMatchObject({ state: "live",label: "Live Chat" });
+    await expect((await status()).json()).resolves.toMatchObject({ state: "live",label: "Live Chat" });
     await env.DB.prepare("INSERT INTO responders (id,display_label,active,created_at,updated_at) VALUES (?,?,?,?,?)").bind("responder-two","Second synthetic responder",1,"2026-01-01T00:00:00.000Z","2026-01-01T00:00:00.000Z").run();
     await heartbeat("responder-two",true);
-    expect((await status()).json()).resolves.toMatchObject({ state: "live" });
+    await expect((await status()).json()).resolves.toMatchObject({ state: "live" });
   });
   it("falls back to async after the last heartbeat expires",async () => {
     await heartbeat("responder-test",true);
     await env.DB.prepare("UPDATE responder_presence SET expires_at=?").bind("2000-01-01T00:00:00.000Z").run();
-    expect((await status()).json()).resolves.toMatchObject({ state: "async" });
+    await expect((await status()).json()).resolves.toMatchObject({ state: "async" });
   });
   it("rejects unauthorized heartbeats",async () => expect((await heartbeat("responder-test",true,"wrong-token")).status).toBe(401));
-  it("returns unavailable when no verified destination is configured",async () => {
+  it("keeps native async chat available without an external destination",async () => {
     const original = env.MESSAGING_DESTINATION_URL;
     env.MESSAGING_DESTINATION_URL = "";
-    expect((await status()).json()).resolves.toMatchObject({ state: "unavailable",destinationUrl: null });
+    await expect((await status()).json()).resolves.toMatchObject({ state: "async",destinationUrl: null });
     env.MESSAGING_DESTINATION_URL = original;
   });
 });
 
 describe("protected CRM API and database integrity",() => {
   it("applies migrations and enforces foreign keys",async () => {
-    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(2);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(3);
     await expect(env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("missing","Photo").run()).rejects.toThrow();
   });
   it("does not expose CRM enumeration publicly",async () => {
