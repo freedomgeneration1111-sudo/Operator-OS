@@ -57,6 +57,9 @@
     "staging": {
       "name": "focus-lab-operations-staging",
       "workers_dev": true,
+      "secrets": {
+        "required": ["VAPID_PUBLIC_KEY"]
+      },
       "assets": {
         "directory": "staff-app/dist",
         "binding": "ASSETS",

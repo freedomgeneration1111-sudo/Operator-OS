@@ -15,6 +15,7 @@ async function mockApi(page:Page,options:{ mutationFailure?:boolean;heartbeatDel
     if(options.mutationFailure&&request.method()!=="GET")return json(route,500,{ ok:false,error:{ code:"test_error",message:"Synthetic server failure" } });
     if(url.pathname==="/v1/internal/responders")return json(route,200,{ ok:true,responders:[responder] });
     if(url.pathname==="/v1/internal/status")return json(route,200,{ ok:true,chat:{ state:"async",label:"Send us a DM",destinationUrl:null,provider:null },activeResponders:[],messaging:{ configured:false,provider:null },presenceTimeoutSeconds:120,eventCapacity:1 });
+    if(url.pathname==="/v1/internal/push/config")return json(route,200,{ok:true,configured:true,publicKey:"test-public-vapid-key",subscriptionCount:0});
     if(url.pathname==="/v1/internal/inbox"){
       const rows=url.searchParams.get("query")==="nothing"?[]:[inquiry];
       return json(route,200,{ ok:true,inquiries:rows,page:{ limit:25,offset:0,total:rows.length,hasMore:false } });
@@ -92,6 +93,8 @@ test("mobile primary navigation remains usable",async({ page },testInfo)=>{
   await nav.getByRole("link",{ name:"Chat" }).click();
   await expect(page.getByRole("heading",{ name:"Chat" })).toBeVisible();
 });
+
+test("notification permission is offered from an explicit Status control",async({page})=>{const calls=await mockApi(page);await login(page);await page.getByRole("link",{name:/Status/}).click();await expect(page.getByRole("heading",{name:"Notifications"})).toBeVisible();await expect(page.getByRole("button",{name:"Enable notifications"})).toBeVisible();expect(calls).toContain("GET /v1/internal/push/config");expect(calls.some((call)=>call.includes("push/subscriptions"))).toBe(false);});
 
 test("mobile conversation tap opens detail, supports reply, and returns read to inbox",async({page},testInfo)=>{
   test.skip(testInfo.project.name!=="staff-mobile","Mobile-only behavior");

@@ -7,6 +7,9 @@
     "nodejs_compat"
   ],
   "workers_dev": true,
+  "secrets": {
+    "required": ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"]
+  },
   "d1_databases": [
     {
       "binding": "DB",

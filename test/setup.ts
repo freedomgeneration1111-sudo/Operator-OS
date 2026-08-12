@@ -16,6 +16,6 @@ beforeEach(async () => {
       env.DB.prepare("INSERT INTO d1_migrations (name) VALUES (?)").bind(migration.name),
     ]);
   }
-  const tables = ["conversation_activity","conversation_reads","conversation_messages","activities","internal_notes","assignments","inquiry_services","conversations","responder_presence","inquiries","events","contacts","responders"];
+  const tables = ["push_deliveries","push_subscriptions","conversation_activity","conversation_reads","conversation_messages","activities","internal_notes","assignments","inquiry_services","conversations","responder_presence","inquiries","events","contacts","responders"];
   await env.DB.batch(tables.map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
 });

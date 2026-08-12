@@ -11,6 +11,9 @@ interface Env {
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_EXPECTED_HOSTNAME?: string;
   TURNSTILE_TEST_BYPASS?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
   INQUIRY_RATE_LIMITER?: RateLimit;
 }
 declare namespace Cloudflare {
@@ -23,6 +26,9 @@ declare namespace Cloudflare {
     TURNSTILE_SECRET_KEY?: string;
     TURNSTILE_EXPECTED_HOSTNAME?: string;
     TURNSTILE_TEST_BYPASS?: string;
+    VAPID_PUBLIC_KEY?: string;
+    VAPID_PRIVATE_KEY?: string;
+    VAPID_SUBJECT?: string;
     INQUIRY_RATE_LIMITER?: RateLimit;
     TEST_MIGRATIONS: TestMigration[];
   }

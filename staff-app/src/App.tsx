@@ -6,6 +6,7 @@ import { useHashRoute,useOnline } from "./lib/hooks";
 import { usePresence } from "./lib/usePresence";
 import { SessionProvider,useSession } from "./lib/session";
 import { chatAudio,type ChatAudioState } from "./lib/chatNotifications";
+import { usePushActivity } from "./lib/pushNotifications";
 import type { OperationsStatus,Responder } from "./lib/types";
 import { InboxView } from "./views/InboxView";
 import { InquiryDetailView } from "./views/InquiryDetailView";
@@ -24,6 +25,7 @@ function OperationsWorkspace(){
   useEffect(()=>{const timer=window.setInterval(refreshStatus,30_000);return()=>window.clearInterval(timer);},[refreshStatus]);
   useEffect(()=>{const unlock=()=>{void chatAudio.unlock().then(setChatAudioState);};document.addEventListener("pointerdown",unlock);document.addEventListener("keydown",unlock);return()=>{document.removeEventListener("pointerdown",unlock);document.removeEventListener("keydown",unlock);};},[]);
   const presence=usePresence(session.client,session.responder.id,status?.presenceTimeoutSeconds??120,refreshStatus);
+  usePushActivity(session.client);
   async function endSession(){if(presence.enabled)await presence.toggle(false);logout();}
   if(loading)return <Loading label="Opening staff workspace…"/>;
   if(error&&!status)return <main className="login-shell"><ErrorState message={error} onRetry={refreshStatus}/><button className="button text" onClick={logout}>End Development Session</button></main>;
@@ -31,9 +33,9 @@ function OperationsWorkspace(){
   let content;
   if(detailMatch)content=<InquiryDetailView client={session.client} id={decodeURIComponent(detailMatch[1]!)} responders={responders} currentResponderId={session.responder.id} online={online}/>;
   else if(route.startsWith("/schedule"))content=<ScheduleView client={session.client}/>;
-  else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status} currentResponderId={session.responder.id} audioState={chatAudioState} onAudioStateChange={setChatAudioState}/>;
+  else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status} currentResponderId={session.responder.id} initialConversationId={new URLSearchParams(route.split("?")[1]??"").get("conversation")} audioState={chatAudioState} onAudioStateChange={setChatAudioState}/>;
   else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
-  else if(route.startsWith("/settings"))content=<SettingsView status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
+  else if(route.startsWith("/settings"))content=<SettingsView client={session.client} status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
   else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()}>{content}</Shell>;
 }
