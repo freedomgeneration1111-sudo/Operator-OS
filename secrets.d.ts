@@ -14,6 +14,9 @@ interface Env {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  RESEND_API_KEY?: string;
+  CUSTOMER_EMAIL_FROM?: string;
+  CUSTOMER_CONVERSATION_ORIGIN?: string;
   INQUIRY_RATE_LIMITER?: RateLimit;
 }
 declare namespace Cloudflare {
@@ -29,6 +32,9 @@ declare namespace Cloudflare {
     VAPID_PUBLIC_KEY?: string;
     VAPID_PRIVATE_KEY?: string;
     VAPID_SUBJECT?: string;
+    RESEND_API_KEY?: string;
+    CUSTOMER_EMAIL_FROM?: string;
+    CUSTOMER_CONVERSATION_ORIGIN?: string;
     INQUIRY_RATE_LIMITER?: RateLimit;
     TEST_MIGRATIONS: TestMigration[];
   }

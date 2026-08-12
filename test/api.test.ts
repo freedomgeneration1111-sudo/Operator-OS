@@ -93,7 +93,7 @@ describe("chat status and responder presence",() => {
 
 describe("protected CRM API and database integrity",() => {
   it("applies migrations and enforces foreign keys",async () => {
-    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(4);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(5);
     await expect(env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("missing","Photo").run()).rejects.toThrow();
   });
   it("does not expose CRM enumeration publicly",async () => {

@@ -2,7 +2,7 @@ export type PublicSiteEnv={ASSETS:{fetch(request:Request):Promise<Response>};OPE
 
 export async function handlePublicSite(request:Request,env:PublicSiteEnv):Promise<Response>{
   const path=new URL(request.url).pathname;
-  if(path==="/v1/inquiries"||path==="/v1/chat/status"||path.startsWith("/v1/chat/conversations")||path==="/health")return env.OPERATIONS_API.fetch(request);
+  if(path==="/v1/inquiries"||path==="/v1/chat/status"||path==="/v1/chat/resume"||path.startsWith("/v1/chat/conversations")||path==="/health")return env.OPERATIONS_API.fetch(request);
   return env.ASSETS.fetch(request);
 }
 

@@ -38,6 +38,7 @@
   ],
   "vars": {
     "PUBLIC_SITE_ORIGIN": "https://focus-lab-public-staging.freedomgeneration1111.workers.dev",
+    "CUSTOMER_CONVERSATION_ORIGIN": "https://focus-lab-public-staging.freedomgeneration1111.workers.dev",
     "CONCURRENT_EVENT_CAPACITY": "1",
     "PRESENCE_TIMEOUT_SECONDS": "120",
     "ENVIRONMENT": "staging",

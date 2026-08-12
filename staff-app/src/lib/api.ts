@@ -13,7 +13,7 @@ export class OperationsClient{
   schedule(start:string,end:string,state="all"){return this.request<{ok:true;range:{start:string;end:string};capacity:number;events:ScheduleEvent[]}>(`/v1/internal/schedule?start=${start}&end=${end}&state=${encodeURIComponent(state)}`);}
   conversations(query=""){return this.request<{ok:true;conversations:Conversation[]}>(`/v1/internal/conversations${query?`?query=${encodeURIComponent(query)}`:""}`);}
   conversation(id:string){return this.request<ConversationDetail>(`/v1/internal/conversations/${encodeURIComponent(id)}`);}
-  reply(id:string,body:string,clientMessageId=crypto.randomUUID()){return this.request<{ok:true;message:unknown}>(`/v1/internal/conversations/${encodeURIComponent(id)}/messages`,{method:"POST",body:JSON.stringify({body,clientMessageId})});}
+  reply(id:string,body:string,clientMessageId=crypto.randomUUID()){return this.request<{ok:true;message:unknown;continuity?:{status:"customer_active"|"email_pending"|"not_applicable"}}>(`/v1/internal/conversations/${encodeURIComponent(id)}/messages`,{method:"POST",body:JSON.stringify({body,clientMessageId})});}
   conversationAssignment(id:string,responderId:string|null){return this.request(`/v1/internal/conversations/${encodeURIComponent(id)}/assignment`,{method:"PATCH",body:JSON.stringify({responderId})});}
   markConversationRead(id:string){return this.request(`/v1/internal/conversations/${encodeURIComponent(id)}/read`,{method:"POST"});}
   chatEventsSocket(){const base=this.baseUrl||window.location.origin;const url=new URL(`/v1/internal/chat/socket`,base);url.protocol=url.protocol==="https:"?"wss:":"ws:";return new WebSocket(url);}
