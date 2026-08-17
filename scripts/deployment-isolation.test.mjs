@@ -21,6 +21,7 @@ test("each business is internally coherent",()=>{
     assert.equal(vars(business.console).PUBLIC_API_ENABLED,"false");
     assert.equal("durable_objects" in business.console,false,"console must not own Durable Objects");
     assert.ok(business.api.durable_objects?.bindings.length,"API must own Durable Objects");
+    assert.match(business.console.main,/console\.ts$/);assert.match(business.api.main,/index\.ts$/);
     if(key==="focus")assert.ok(Object.values(business.console.exports).every((entry)=>entry.state==="deleted"),"legacy console DO exports must remain explicit tombstones");
   }
   assert.equal(vars(inventory.focus.api).PUBLIC_API_ENABLED,"true");

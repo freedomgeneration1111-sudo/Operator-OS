@@ -1,6 +1,6 @@
 {
   "$schema":"../../node_modules/wrangler/config-schema.json",
-  "name":"moses-operator-console-staging","main":"../../src/index.ts","compatibility_date":"2026-08-10","compatibility_flags":["nodejs_compat"],"workers_dev":true,
+  "name":"moses-operator-console-staging","main":"../../src/console.ts","compatibility_date":"2026-08-10","compatibility_flags":["nodejs_compat"],"workers_dev":true,
   "secrets":{"required":["VAPID_PUBLIC_KEY"]},
   "assets":{"directory":"../../staff-app/dist","binding":"ASSETS","not_found_handling":"single-page-application","run_worker_first":true},
   "d1_databases":[{"binding":"DB","database_name":"moses-operator-crm-staging","database_id":"00000000-0000-0000-0000-000000002001","migrations_dir":"../../migrations"}],

@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "focus-lab-operations-staging",
-  "main": "../../src/index.ts",
+  "main": "../../src/console.ts",
   "compatibility_date": "2026-08-10",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
