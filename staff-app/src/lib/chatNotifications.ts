@@ -1,7 +1,9 @@
+import { businessProfile } from "./business-profile";
+
 export type ChatAlertKind="conversation:new"|"message:new";
 export type ChatAudioState="uninitialized"|"running"|"suspended"|"closed"|"unsupported"|"interrupted";
 export type ChatAlertEvent={id:string;type:ChatAlertKind;conversationId:string};
-const preferenceKey="focuslab.staff.chatSounds.v1";
+const preferenceKey=`operator.${businessProfile.key}.staff.chatSounds.v1`;
 export function soundsEnabled(storage:Pick<Storage,"getItem">=localStorage){return storage.getItem(preferenceKey)!=="off";}
 export function setSoundsEnabled(enabled:boolean,storage:Pick<Storage,"setItem">=localStorage){storage.setItem(preferenceKey,enabled?"on":"off");}
 export function createAlertDeduplicator(limit=200){const seen=new Set<string>();return(id:string)=>{if(seen.has(id))return false;seen.add(id);if(seen.size>limit){const oldest=seen.values().next().value;if(oldest)seen.delete(oldest);}return true;};}

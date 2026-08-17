@@ -34,6 +34,7 @@ describe("POST /v1/inquiries",() => {
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(1);
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiry_services").first<number>("count")).toBe(2);
     expect(await env.DB.prepare("SELECT blocks_capacity FROM events WHERE id=(SELECT event_id FROM inquiries WHERE id=?)").bind(body.inquiryId).first<number>("blocks_capacity")).toBe(0);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM intake_submissions WHERE inquiry_id=?").bind(body.inquiryId).first<number>("count")).toBe(1);
   });
   it("rejects missing required fields with CORS",async () => {const response=await SELF.fetch(inquiryRequest({ name: "Only name" }));expect(response.status).toBe(422);expectPublicCors(response);});
   it("rejects malformed fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,email: "not-email" }))).status).toBe(422));
@@ -47,6 +48,12 @@ describe("POST /v1/inquiries",() => {
     expect(replay.status).toBe(200);
     expect((await replay.json<{ idempotentReplay: boolean }>()).idempotentReplay).toBe(true);
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiries").first<number>("count")).toBe(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM events").first<number>("count")).toBe(1);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM inquiry_services").first<number>("count")).toBe(2);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM intake_submissions").first<number>("count")).toBe(1);
+    const payload=await env.DB.prepare("SELECT payload_json FROM intake_submissions").first<string>("payload_json");
+    expect(payload).not.toContain("turnstileToken");
+    expect(payload).not.toContain("website");
   });
   it("supports a multi-day date range",async () => {
     const response = await SELF.fetch(inquiryRequest({ ...validInquiry,endDate: "2027-06-12" },"multi-day-00000001"));
@@ -93,7 +100,7 @@ describe("chat status and responder presence",() => {
 
 describe("protected CRM API and database integrity",() => {
   it("applies migrations and enforces foreign keys",async () => {
-    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(5);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(6);
     await expect(env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("missing","Photo").run()).rejects.toThrow();
   });
   it("does not expose CRM enumeration publicly",async () => {

@@ -1,9 +1,10 @@
 import { createContext,useContext,useEffect,useMemo,useState,type ReactNode } from "react";
 import { ApiError,OperationsClient } from "./api";
 import type { Responder,StaffUser } from "./types";
+import { businessProfile } from "./business-profile";
 type Session={client:OperationsClient;apiUrl:string;responder:Responder;user:StaffUser;authMode:"development"|"access"};
 type Context={session:Session|null;developmentAuthAllowed:boolean;loading:boolean;authError:string;loginDevelopment(apiUrl:string,token:string,responder:Responder):void;logout():void;retry():void};
-const SessionContext=createContext<Context|null>(null);const STORAGE_KEY="focus-lab-ops-development-session-v2";
+const SessionContext=createContext<Context|null>(null);const STORAGE_KEY=`operator-os-${businessProfile.key}-development-session-v3`;
 const isDev=()=>import.meta.env.VITE_AUTH_MODE==="development"&&import.meta.env.VITE_APP_STAGE!=="production";
 const apiUrl=()=>isDev()?(import.meta.env.VITE_OPERATIONS_API_URL??"http://127.0.0.1:8787"):"";
 export function SessionProvider({children}:{children:ReactNode}){const [session,setSession]=useState<Session|null>(null);const [loading,setLoading]=useState(!isDev());const [authError,setAuthError]=useState("");const [attempt,setAttempt]=useState(0);
@@ -12,4 +13,4 @@ export function SessionProvider({children}:{children:ReactNode}){const [session,
 export function useSession(){const value=useContext(SessionContext);if(!value)throw new Error("SessionProvider is missing");return value;}
 function toResponder(user:StaffUser):Responder{return{id:user.id,display_label:user.displayName,role:user.role,active:1,currently_available:user.availabilityState==="available"?1:0,heartbeat_at:null,expires_at:null};}
 function restoreDevelopment(onUnauthenticated:()=>void):Session|null{if(!isDev())return null;try{const value=JSON.parse(sessionStorage.getItem(STORAGE_KEY)??"null") as {apiUrl?:unknown;token?:unknown;responder?:Responder};if(typeof value?.apiUrl!=="string"||typeof value.token!=="string"||!value.responder)return null;const user:StaffUser={id:value.responder.id,displayName:value.responder.display_label,role:value.responder.role??"responder",verifiedEmail:null,authMode:"development",availabilityState:"unavailable"};return{apiUrl:value.apiUrl,responder:value.responder,user,authMode:"development",client:new OperationsClient(value.apiUrl,{token:value.token,responderId:value.responder.id},onUnauthenticated)};}catch{return null;}}
-function authMessage(reason:unknown){if(reason instanceof ApiError){if(reason.code==="staff_inactive")return"Your Focus Lab staff access is inactive.";if(reason.code==="staff_not_authorized")return"Your authenticated identity is not authorized for this staff application.";if(reason.status===401)return"Your staff session expired or was revoked. Sign in again.";}return"Staff authentication could not be verified.";}
+function authMessage(reason:unknown){if(reason instanceof ApiError){if(reason.code==="staff_inactive")return`Your ${businessProfile.shortName} staff access is inactive.`;if(reason.code==="staff_not_authorized")return"Your authenticated identity is not authorized for this staff application.";if(reason.status===401)return"Your staff session expired or was revoked. Sign in again.";}return"Staff authentication could not be verified.";}

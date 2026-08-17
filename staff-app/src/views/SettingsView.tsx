@@ -3,6 +3,7 @@ import { presencePresentation,type HeartbeatState } from "../lib/heartbeat";
 import { formatDateTime } from "../lib/format";
 import type { OperationsClient } from "../lib/api";
 import { usePushNotifications,type PushDiagnostics } from "../lib/pushNotifications";
+import { businessProfile } from "../lib/business-profile";
 
 export function SettingsView({ client,status,responders,currentResponderId,availability,onAvailability }:{
   client:OperationsClient;status:OperationsStatus|null;responders:Responder[];currentResponderId:string;
@@ -33,7 +34,7 @@ export function SettingsView({ client,status,responders,currentResponderId,avail
         <button className={"availability-button "+(presence.confirmedLive?"is-live":"")} onClick={()=>onAvailability(!availability.enabled)}><span aria-hidden="true">●</span><strong>{presence.label}</strong><small>{presence.detail}</small></button>
         <p className="help-text">Presence expires server-side if this app stops sending heartbeats. Briefly switching apps does not immediately mark you unavailable.</p>
       </section>
-      <section className="panel"><h2>Aggregate Customer Chat</h2><dl><dt>Public state</dt><dd>{status?.chat.label??"Checking…"}</dd><dt>Active responders</dt><dd>{status?.activeResponders.length??0}</dd><dt>Provider</dt><dd>{status?.messaging.provider??"Not configured"}</dd><dt>Heartbeat timeout</dt><dd>{status?.presenceTimeoutSeconds??"—"} seconds</dd><dt>Event capacity</dt><dd>{status?.eventCapacity??"—"}</dd></dl></section>
+      <section className="panel"><h2>Aggregate Customer Chat</h2><dl><dt>Public state</dt><dd>{status?.chat.label??"Checking…"}</dd><dt>Active responders</dt><dd>{status?.activeResponders.length??0}</dd><dt>Provider</dt><dd>{status?.messaging.provider??"Not configured"}</dd><dt>Heartbeat timeout</dt><dd>{status?.presenceTimeoutSeconds??"—"} seconds</dd>{businessProfile.capabilities.capacity?<><dt>Event capacity</dt><dd>{status?.eventCapacity??"—"}</dd></>:null}</dl></section>
       <section className="panel span-two"><h2>Internal Responders</h2><div className="responder-list">{responders.map((responder)=><article key={responder.id}><div><strong>{responder.display_label}{responder.id===currentResponderId?" (you)":""}</strong><p>{responder.currently_available===1?"Available for live chat":"Not currently live"}</p></div><div><span className={"connection "+(responder.currently_available===1?"online":"offline")}><span aria-hidden="true">●</span> {responder.currently_available===1?"Live":"Offline"}</span><small>{responder.heartbeat_at?"Last heartbeat "+formatDateTime(responder.heartbeat_at):"No heartbeat recorded"}</small></div></article>)}</div></section>
     </div>
   </section>;

@@ -8,6 +8,7 @@ export default defineConfig({
     pool: cloudflarePool(async () => ({
       wrangler: { configPath: "operations/wrangler.jsonc" },
       miniflare: {
+        d1Databases: { MIGRATION_DB: "sprint-1-migration-test" },
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("operations/migrations"),
           INTERNAL_API_TOKEN: "development-test-token-00000000",

@@ -1,9 +1,10 @@
 import { useCallback,useEffect,useRef,useState } from "react";
 import { HeartbeatController,type HeartbeatState } from "./heartbeat";
 import type { OperationsClient } from "./api";
+import { businessProfile } from "./business-profile";
 
 export function usePresence(client:OperationsClient,responderId:string,timeoutSeconds:number,onChanged:()=>void){
-  const key=`focus-lab-ops-live-${responderId}`;
+  const key=`operator-os-${businessProfile.key}-live-${responderId}`;
   const [enabled,setEnabled]=useState(()=>sessionStorage.getItem(key)==="true");
   const [state,setState]=useState<HeartbeatState>(enabled?"starting":"off");
   const [message,setMessage]=useState<string>();

@@ -14,6 +14,7 @@ import { ScheduleView } from "./views/ScheduleView";
 import { ChatView } from "./views/ChatView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
+import { businessProfile,routeEnabled } from "./lib/business-profile";
 
 export default function App(){return <SessionProvider><SessionGate/></SessionProvider>;}
 function SessionGate(){const {session,developmentAuthAllowed,loading,authError,retry}=useSession();if(session)return <OperationsWorkspace/>;if(developmentAuthAllowed)return <DevLogin/>;if(loading)return <Loading label="Verifying secure staff session…"/>;return <main className="login-shell"><section className="login-card"><p className="eyebrow">Secure Staff Access</p><h1>Sign in required</h1><p role="alert">{authError||"Cloudflare Access authentication is required."}</p><a className="button primary" href={`/cdn-cgi/access/login?redirect_url=${encodeURIComponent(window.location.href)}`}>Sign in again</a><button className="button text" onClick={retry}>Retry session check</button></section></main>;}
@@ -32,10 +33,11 @@ function OperationsWorkspace(){
   const detailMatch=route.match(/^\/inquiry\/([^/?]+)/);
   let content;
   if(detailMatch)content=<InquiryDetailView client={session.client} id={decodeURIComponent(detailMatch[1]!)} responders={responders} currentResponderId={session.responder.id} online={online}/>;
-  else if(route.startsWith("/schedule"))content=<ScheduleView client={session.client}/>;
+  else if(route.startsWith("/schedule")&&businessProfile.capabilities.schedule)content=<ScheduleView client={session.client}/>;
   else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status} currentResponderId={session.responder.id} initialConversationId={new URLSearchParams(route.split("?")[1]??"").get("conversation")} audioState={chatAudioState} onAudioStateChange={setChatAudioState}/>;
   else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   else if(route.startsWith("/settings"))content=<SettingsView client={session.client} status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
   else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
+  if(!routeEnabled(route,businessProfile))content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()}>{content}</Shell>;
 }

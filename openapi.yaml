@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
-  title: Focus Lab Operations API
-  version: 0.1.0
-  description: Review-stage contract. Inquiry receipt never confirms availability.
+  title: Operator Operations API
+  version: 0.2.0
+  description: Business-neutral operations core. The public inquiry route remains the Focus event adapter; receipt never confirms availability.
 servers:
   - url: http://localhost:8787
 paths:
   /v1/inquiries:
     post:
-      summary: Persist a website inquiry for human review
+      summary: Persist a Focus event inquiry for human review
       parameters:
         - in: header
           name: Idempotency-Key
@@ -119,7 +119,7 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
   /v1/internal/inquiries/{inquiryId}:
     get:
-      summary: Read inquiry, event, contact, services, notes, assignments, activity and conversation metadata
+      summary: Read inquiry, contact, optional event or consulting extension, provenance, notes, assignments, activity and conversation metadata
       security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
       responses:
@@ -149,13 +149,13 @@ paths:
       summary: Set explicit event capacity blocking
       security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
-      responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' } }
+      responses: { '200': { description: Updated }, '401': { $ref: '#/components/responses/Error' }, '409': { description: Inquiry has no event extension, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /v1/internal/inquiries/{inquiryId}/conflicts:
     get:
       summary: Get internal scheduling decision support
       security: [{ accessAssertion: [] }]
       parameters: [{ $ref: '#/components/parameters/InquiryId' }]
-      responses: { '200': { description: Scheduling assessment }, '401': { $ref: '#/components/responses/Error' } }
+      responses: { '200': { description: Scheduling assessment }, '401': { $ref: '#/components/responses/Error' }, '409': { description: Inquiry has no event extension, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } } }
   /v1/internal/responders:
     get: { summary: List active internal responders and presence, security: [{ accessAssertion: [] }], responses: { "200": { description: Active responders }, "401": { $ref: "#/components/responses/Error" } } }
   /v1/internal/status:
@@ -227,6 +227,14 @@ components:
         contact: { enum: [email,phone] }
         note: { type: string, maxLength: 4000 }
         source: { type: string, maxLength: 100 }
+        referral: { type: string, maxLength: 300 }
+        landingPage: { type: string, format: uri, maxLength: 1000 }
+        referrer: { type: string, format: uri, maxLength: 1000 }
+        utmSource: { type: string, maxLength: 200 }
+        utmMedium: { type: string, maxLength: 200 }
+        utmCampaign: { type: string, maxLength: 200 }
+        utmTerm: { type: string, maxLength: 200 }
+        utmContent: { type: string, maxLength: 200 }
         turnstileToken: { type: string, minLength: 1, maxLength: 2048, description: Short-lived token verified server-side with Cloudflare Siteverify }
         website: { type: string, maxLength: 300, description: Honeypot; legitimate clients send an empty string }
     InquiryCreated:
@@ -235,7 +243,7 @@ components:
       properties:
         ok: { const: true }
         inquiryId: { type: string }
-        eventId: { type: string }
+        eventId: { type: [string,'null'], description: Optional in the shared response contract; always a real string for this Focus public adapter }
         createdAt: { type: string, format: date-time }
         idempotentReplay: { type: boolean }
         status: { const: received_for_review }

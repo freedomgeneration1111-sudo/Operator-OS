@@ -1,7 +1,8 @@
 import { useCallback,useEffect,useState } from "react";
 import type { OperationsClient } from "./api";
+import { businessProfile,serviceWorkerVersion as expectedVersion } from "./business-profile";
 
-const EXPECTED_SERVICE_WORKER_VERSION="focus-lab-ops-sw-v4";
+const EXPECTED_SERVICE_WORKER_VERSION=expectedVersion(businessProfile);
 export type PushNotificationState="checking"|"available"|"enabled"|"blocked"|"unsupported"|"error";
 export type PushDiagnostics={
   secureContext:boolean;serviceWorkerApi:boolean;pushManagerApi:boolean;notificationApi:boolean;
@@ -91,7 +92,7 @@ export function usePushNotifications(client:OperationsClient):PushNotificationCo
       if(Notification.permission==="denied"){setState("blocked");setMessage("Notifications are blocked by this device or browser. Enable them in browser or system settings.");}
       else if(subscription&&next.d1Registered){setState("enabled");setMessage("This device will receive customer alerts.");}
       else if(!next.vapidConfigured){setState("error");setMessage("Notifications are not configured for this environment.");}
-      else{setState("available");setMessage(Notification.permission==="granted"?"Permission is granted, but this device is not subscribed. Enable notifications to repair it.":"Get notified when customers message Focus Lab.");}
+      else{setState("available");setMessage(Notification.permission==="granted"?"Permission is granted, but this device is not subscribed. Enable notifications to repair it.":`Get notified when customers message ${businessProfile.shortName}.`);}
     }catch(error){
       next.lastChecked=new Date().toISOString();setDiagnostics({...next});
       setState("error");setMessage("Notification setup failed during "+(next.errorStage??"status check")+": "+(error instanceof Error?error.message:"unknown error"));
@@ -113,7 +114,7 @@ export function usePushNotifications(client:OperationsClient):PushNotificationCo
       const subscription=existing??await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64Key(current.publicKey)});
       await client.registerPush(subscription.toJSON());
       await client.pushActivity(subscription.endpoint,isStaffPageForeground());
-      window.dispatchEvent(new Event("focuslab:push-subscription-change"));
+      window.dispatchEvent(new Event("operator:push-subscription-change"));
       await inspect();
     }catch(error){
       setState("error");setMessage("Subscription failed: "+(error instanceof Error?error.message:"unknown error"));
@@ -127,7 +128,7 @@ export function usePushNotifications(client:OperationsClient):PushNotificationCo
       const registration=await navigator.serviceWorker.getRegistration();
       const subscription=await registration?.pushManager.getSubscription();
       if(subscription){await client.removePush(subscription.endpoint);await subscription.unsubscribe();}
-      window.dispatchEvent(new Event("focuslab:push-subscription-change"));await inspect();
+      window.dispatchEvent(new Event("operator:push-subscription-change"));await inspect();
     }catch(error){setState("error");setMessage("Notifications could not be disabled: "+(error instanceof Error?error.message:"unknown error"));}
     finally{setBusy(false);}
   }
@@ -163,14 +164,14 @@ export function usePushActivity(client:OperationsClient){
     const background=()=>{void sync(false);};
     void sync();document.addEventListener("visibilitychange",update);window.addEventListener("focus",update);
     window.addEventListener("blur",background);window.addEventListener("pagehide",background);
-    window.addEventListener("focuslab:push-subscription-change",update);
+    window.addEventListener("operator:push-subscription-change",update);
     const timer=window.setInterval(()=>{if(isStaffPageForeground())void sync(true);},30_000);
     return()=>{stopped=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",update);
       window.removeEventListener("focus",update);window.removeEventListener("blur",background);
-      window.removeEventListener("pagehide",background);window.removeEventListener("focuslab:push-subscription-change",update);};
+      window.removeEventListener("pagehide",background);window.removeEventListener("operator:push-subscription-change",update);};
   },[client]);
 }
 
 export function syncAppBadge(unreadConversations:number){const badgeNavigator=navigator as Navigator&{setAppBadge?:(count?:number)=>Promise<void>;clearAppBadge?:()=>Promise<void>};try{const result=unreadConversations>0?badgeNavigator.setAppBadge?.(unreadConversations):badgeNavigator.clearAppBadge?.();void result?.catch(()=>{});}catch{/* Badging is optional. */}}
 function base64Key(value:string){const padding="=".repeat((4-value.length%4)%4);const bytes=atob((value+padding).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(bytes,(character)=>character.charCodeAt(0));}
-function serviceWorkerVersion(worker:ServiceWorker){return new Promise<string|null>((resolve)=>{const channel=new MessageChannel();const timer=window.setTimeout(()=>resolve(null),1_500);channel.port1.onmessage=(event)=>{window.clearTimeout(timer);resolve(typeof event.data?.version==="string"?event.data.version:null);};worker.postMessage({type:"focuslab:push-diagnostics"},[channel.port2]);});}
+function serviceWorkerVersion(worker:ServiceWorker){return new Promise<string|null>((resolve)=>{const channel=new MessageChannel();const timer=window.setTimeout(()=>resolve(null),1_500);channel.port1.onmessage=(event)=>{window.clearTimeout(timer);resolve(typeof event.data?.version==="string"?event.data.version:null);};worker.postMessage({type:"operator:push-diagnostics"},[channel.port2]);});}

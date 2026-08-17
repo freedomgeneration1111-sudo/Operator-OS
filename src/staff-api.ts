@@ -55,8 +55,10 @@ async function inbox(db: D1Database,params: URLSearchParams) {
   const values: Array<string|number> = [];
   if (query) {
     const term = `%${query}%`;
-    conditions.push("(c.full_name LIKE ? OR c.email LIKE ? OR i.id LIKE ? OR e.venue_location LIKE ? OR e.event_family LIKE ? OR e.start_date LIKE ? OR i.workflow_state LIKE ?)");
-    values.push(term,term,term,term,term,term,term);
+    conditions.push(`(c.full_name LIKE ? OR c.email LIKE ? OR i.id LIKE ? OR e.venue_location LIKE ? OR e.event_family LIKE ?
+      OR e.start_date LIKE ? OR i.workflow_state LIKE ? OR cd.organization LIKE ? OR cd.offer_service_area LIKE ?
+      OR cd.situation_problem LIKE ? OR cd.desired_outcome LIKE ? OR cd.referral_source LIKE ?)`);
+    values.push(term,term,term,term,term,term,term,term,term,term,term,term);
   }
   if (workflow) { conditions.push("i.workflow_state=?");values.push(workflow); }
   if (eventFamily) { conditions.push("e.event_family=?");values.push(eventFamily); }
@@ -64,10 +66,13 @@ async function inbox(db: D1Database,params: URLSearchParams) {
   if (assignment === "unassigned") conditions.push("NOT EXISTS (SELECT 1 FROM assignments ax WHERE ax.inquiry_id=i.id)");
   else if (assignment) { conditions.push("EXISTS (SELECT 1 FROM assignments ax WHERE ax.inquiry_id=i.id AND ax.responder_id=?)");values.push(assignment); }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const from = `FROM inquiries i JOIN contacts c ON c.id=i.contact_id JOIN events e ON e.id=i.event_id ${where}`;
+  const from = `FROM inquiries i JOIN contacts c ON c.id=i.contact_id LEFT JOIN events e ON e.id=i.event_id
+    LEFT JOIN consulting_details cd ON cd.inquiry_id=i.id ${where}`;
   const [rows,count] = await db.batch([
     db.prepare(`SELECT i.id,i.workflow_state,i.source_channel,i.created_at,i.updated_at,c.full_name,
       e.id AS event_id,e.event_family,e.start_date,e.end_date,e.start_time,e.end_time,e.venue_location,e.blocks_capacity,e.scheduling_state,
+      cd.organization,cd.offer_service_area,cd.situation_problem,cd.desired_outcome,cd.timeline,cd.budget AS consulting_budget,
+      cd.country_region,cd.referral_source,
       (SELECT GROUP_CONCAT(service_name,'|') FROM inquiry_services s WHERE s.inquiry_id=i.id) AS services,
       (SELECT GROUP_CONCAT(r.display_label,'|') FROM assignments a JOIN responders r ON r.id=a.responder_id WHERE a.inquiry_id=i.id) AS assignee_labels,
       (SELECT GROUP_CONCAT(a.responder_id,'|') FROM assignments a WHERE a.inquiry_id=i.id) AS assignee_ids

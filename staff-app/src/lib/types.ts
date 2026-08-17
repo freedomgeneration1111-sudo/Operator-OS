@@ -10,12 +10,27 @@ export type OperationsStatus={
 };
 export type InboxItem={
   id:string;workflow_state:WorkflowState;source_channel:string;created_at:string;updated_at:string;full_name:string;
-  event_id:string;event_family:string|null;start_date:string|null;end_date:string|null;start_time:string|null;end_time:string|null;
-  venue_location:string|null;blocks_capacity:number;scheduling_state:string;services:string|null;assignee_labels:string|null;assignee_ids:string|null;
+  event_id:string|null;event_family:string|null;start_date:string|null;end_date:string|null;start_time:string|null;end_time:string|null;
+  venue_location:string|null;blocks_capacity:number|null;scheduling_state:string|null;services:string|null;assignee_labels:string|null;assignee_ids:string|null;
+  organization:string|null;offer_service_area:string|null;situation_problem:string|null;desired_outcome:string|null;timeline:string|null;
+  consulting_budget:string|null;country_region:string|null;referral_source:string|null;
 };
 export type InboxResponse={ ok:true;inquiries:InboxItem[];page:{ limit:number;offset:number;total:number;hasMore:boolean } };
+export type InquiryRecord={
+  id:string;contact_id:string;event_id:string|null;source_channel:string;workflow_state:WorkflowState;
+  budget_context:string|null;customer_note:string|null;created_at:string;updated_at:string;
+  full_name:string;email:string|null;phone:string|null;preferred_contact:string|null;
+  event_family:string|null;start_date:string|null;end_date:string|null;start_time:string|null;end_time:string|null;
+  venue_location:string|null;guest_count:number|null;blocks_capacity:number|null;scheduling_state:string|null;
+};
+export type ConsultingDetail={
+  organization:string|null;offer_service_area:string|null;situation_problem:string|null;desired_outcome:string|null;
+  timeline:string|null;budget:string|null;country_region:string|null;referral_source:string|null;created_at:string;updated_at:string;
+};
 export type InquiryDetail={
-  ok:true;inquiry:Record<string,unknown>;services:Array<{ service_name:string }>;
+  ok:true;inquiry:InquiryRecord;event:Record<string,unknown>|null;consulting:ConsultingDetail|null;
+  intakeSubmissions:Array<{id:string;form_schema_key:string;schema_version:number;origin:string;source_channel:string;received_at:string}>;
+  services:Array<{ service_name:string }>;
   assignments:Array<{ responder_id:string;display_label:string;assigned_at:string }>;
   notes:Array<{ id:string;author_responder_id:string|null;author_label:string|null;body:string;created_at:string }>;
   activities:Array<{ id:string;actor_kind:string;actor_id:string|null;activity_type:string;metadata_json:string;created_at:string }>;
