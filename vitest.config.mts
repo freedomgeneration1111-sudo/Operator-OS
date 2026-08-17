@@ -3,14 +3,14 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["operations/test/**/*.test.ts"],
-    setupFiles: ["operations/test/setup.ts"],
+    include: ["test/**/*.test.ts"],
+    setupFiles: ["test/setup.ts"],
     pool: cloudflarePool(async () => ({
-      wrangler: { configPath: "operations/wrangler.jsonc" },
+      wrangler: { configPath: "wrangler.jsonc" },
       miniflare: {
         d1Databases: { MIGRATION_DB: "sprint-1-migration-test" },
         bindings: {
-          TEST_MIGRATIONS: await readD1Migrations("operations/migrations"),
+          TEST_MIGRATIONS: await readD1Migrations("migrations"),
           INTERNAL_API_TOKEN: "development-test-token-00000000",
           MESSAGING_PROVIDER: "test-shared-inbox",
           MESSAGING_DESTINATION_URL: "https://messaging.example.test/shared",

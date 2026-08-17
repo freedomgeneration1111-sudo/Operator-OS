@@ -7,6 +7,7 @@ import { enforceInquiryProtection,InquiryProtectionError } from "./inquiry-prote
 import { handleStaffApi } from "./staff-api";
 import { NativeChatError,internalConversationRoute,nativeChatStatus,publicConversationRoute,publicResumeConversation,startNativeConversation } from "./native-chat";
 import { handlePushApi } from "./push";
+import { resolveClientBusinessProfile } from "../business-profiles.mts";
 export { ChatRoom,StaffChatHub } from "./chat-durable";
 
 const heartbeatSchema=z.object({available:z.boolean()}).strict();
@@ -19,8 +20,11 @@ async function publicInquiry(request:Request,env:Env){const key=request.headers.
 async function heartbeat(request:Request,env:Env,actor:StaffIdentity){requirePermission(actor,"presence:self");const parsed=heartbeatSchema.safeParse(await parseBoundedJson(request));if(!parsed.success)throw new PublicError(422,"validation_error","Request validation failed",parsed.error.flatten().fieldErrors as Record<string,string[]>);const nowDate=new Date();const timeoutSeconds=positiveInteger(env.PRESENCE_TIMEOUT_SECONDS,120);const expiresAt=new Date(nowDate.getTime()+timeoutSeconds*1000).toISOString();await env.DB.prepare(`INSERT INTO responder_presence (responder_id,available,heartbeat_at,expires_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(responder_id) DO UPDATE SET available=excluded.available,heartbeat_at=excluded.heartbeat_at,expires_at=excluded.expires_at,updated_at=excluded.updated_at`).bind(actor.id,parsed.data.available?1:0,nowDate.toISOString(),expiresAt,nowDate.toISOString()).run();return json({ok:true,state:parsed.data.available?"available":"unavailable",expiresAt});}
 async function route(request:Request,env:Env):Promise<Response>{
   const url=new URL(request.url);
-  if(request.method==="GET"&&url.pathname==="/health")return json({ok:true,service:"focus-lab-operations"});
-  if(request.method==="POST"&&url.pathname==="/v1/inquiries")return publicInquiry(request,env);
+  const profile=resolveClientBusinessProfile(env.BUSINESS_PROFILE);
+  const publicApiEnabled=env.PUBLIC_API_ENABLED!=="false";
+  if(request.method==="GET"&&url.pathname==="/health")return json({ok:true,service:`operator-os-${profile.key}`,business:profile.key,deployment:env.DEPLOYMENT_KEY??null});
+  if(request.method==="POST"&&url.pathname==="/v1/inquiries"&&publicApiEnabled&&profile.publicEventInquiry)return publicInquiry(request,env);
+  if(url.pathname.startsWith("/v1/chat/")&&(!publicApiEnabled||!profile.publicChat))return json({ok:false,error:{code:"module_disabled",message:"Public chat is not enabled for this deployment"}},404);
   if(request.method==="POST"&&url.pathname==="/v1/chat/conversations")return startNativeConversation(request,env);
   if(url.pathname==="/v1/chat/resume"){const resumed=await publicResumeConversation(request,env);if(resumed)return resumed;}
   if(url.pathname.startsWith("/v1/chat/conversations/")){const chat=await publicConversationRoute(request,env,url.pathname);if(chat)return chat;}
@@ -28,6 +32,8 @@ async function route(request:Request,env:Env):Promise<Response>{
   if(url.pathname.startsWith("/v1/internal/chat/")||url.pathname.startsWith("/v1/internal/conversations/")||url.pathname==="/v1/internal/push/test"){if(env.CHAT_API)return env.CHAT_API.fetch(request);}
   if(url.pathname.startsWith("/v1/internal/")){
     const actor=await authenticateStaff(request,env);const push=await handlePushApi(request,env,url.pathname,actor);if(push)return push;
+    if(!profile.capabilities.schedule&&url.pathname==="/v1/internal/schedule")return json({ok:false,error:{code:"module_disabled",message:"Scheduling is not enabled for this deployment"}},404);
+    if(!profile.capabilities.capacity&&/^\/v1\/internal\/inquiries\/[^/]+\/(capacity|conflicts)$/.test(url.pathname))return json({ok:false,error:{code:"module_disabled",message:"Event capacity is not enabled for this deployment"}},404);
     const nativeChat=await internalConversationRoute(request,env,url.pathname,actor);if(nativeChat)return nativeChat;
     if(request.method==="POST"&&url.pathname==="/v1/internal/presence/heartbeat")return heartbeat(request,env,actor);
     const capacity=positiveInteger(env.CONCURRENT_EVENT_CAPACITY,1);const staff=await handleStaffApi(request,env,url.pathname,capacity,actor);if(staff)return staff;

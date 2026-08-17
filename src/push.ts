@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { z } from "zod";
 import type { StaffIdentity } from "./auth";
+import { resolveClientBusinessProfile } from "../business-profiles.mts";
 
 const subscriptionSchema=z.object({
   endpoint:z.string().url().max(2048).refine((value)=>new URL(value).protocol==="https:","A secure push endpoint is required"),
@@ -61,10 +62,10 @@ export async function sendTestNotification(env:Env,responderId:string,endpoint:s
   if(!configured(env))return{status:503,body:{ok:false,error:{code:"push_not_configured",message:"Staff notifications are not configured"}}};
   const row=await env.DB.prepare("SELECT id,responder_id,endpoint,p256dh,auth FROM push_subscriptions WHERE endpoint=? AND responder_id=? AND enabled=1").bind(endpoint,responderId).first<SubscriptionRow>();
   if(!row)return{status:404,body:{ok:false,error:{code:"subscription_not_found",message:"This device is not registered for notifications"}}};
-  const payload:PushPayload={type:"test",title:"Focus Lab test notification",body:"Server push notifications are working.",url:"/#/settings",badge:await unreadConversationCount(env.DB,responderId)};
+  const profile=resolveClientBusinessProfile(env.BUSINESS_PROFILE);const payload:PushPayload={type:"test",title:`${profile.shortName} test notification`,body:"Server push notifications are working.",url:"/#/settings",badge:await unreadConversationCount(env.DB,responderId)};
   try{
     const response=await send({endpoint:row.endpoint,keys:{p256dh:row.p256dh,auth:row.auth}},JSON.stringify(payload),{
-      vapidDetails:{subject:env.VAPID_SUBJECT!,publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!},TTL:60,urgency:"normal",topic:"focuslab-push-test",
+      vapidDetails:{subject:env.VAPID_SUBJECT!,publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!},TTL:60,urgency:"normal",topic:`${profile.pushTopicPrefix}-push-test`,
     });
     const completed=new Date().toISOString();await env.DB.prepare("UPDATE push_subscriptions SET last_success_at=?,last_failure_at=NULL,last_failure_code=NULL WHERE id=?").bind(completed,row.id).run();
     return{status:200,body:{ok:true,status:"delivered",acceptedStatus:response.statusCode,deliveredAt:completed}};
@@ -86,11 +87,11 @@ export async function dispatchPushEvent(env:Env,event:PushEvent,send:PushSender=
     const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (event_id,subscription_id,conversation_id,notification_type,status,attempted_at)
       VALUES (?,?,?,?,'pending',?)`).bind(event.id,row.id,event.conversationId,notificationType,now).run();
     if(Number(inserted.meta.changes)===0)return;
-    const badge=await unreadConversationCount(env.DB,row.responder_id);const payload=pushPayload(notificationType,event.conversationId,badge);
+    const badge=await unreadConversationCount(env.DB,row.responder_id);const profile=resolveClientBusinessProfile(env.BUSINESS_PROFILE);const payload=pushPayload(notificationType,event.conversationId,badge,profile);
     try{
       const response=await send({endpoint:row.endpoint,keys:{p256dh:row.p256dh,auth:row.auth}},JSON.stringify(payload),{
         vapidDetails:{subject:env.VAPID_SUBJECT!,publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!},
-        TTL:notificationType==="async_message"?3600:300,urgency:notificationType==="async_message"?"normal":"high",topic:topic(event.conversationId),
+        TTL:notificationType==="async_message"?3600:300,urgency:notificationType==="async_message"?"normal":"high",topic:topic(event.conversationId,profile.pushTopicPrefix),
       });
       const completed=new Date().toISOString();await env.DB.batch([
         env.DB.prepare("UPDATE push_deliveries SET status='sent',response_status=?,completed_at=? WHERE event_id=? AND subscription_id=?").bind(response.statusCode,completed,event.id,row.id),
@@ -119,15 +120,15 @@ async function routeResponders(db:D1Database,assignedResponderId:string|null,now
 }
 async function unreadConversationCount(db:D1Database,responderId:string){const row=await db.prepare(`SELECT COUNT(*) AS count FROM conversations cv WHERE EXISTS (
   SELECT 1 FROM conversation_messages cm WHERE cm.conversation_id=cv.id AND cm.sender_kind='customer' AND cm.sequence>COALESCE((SELECT cr.last_read_sequence FROM conversation_reads cr WHERE cr.conversation_id=cv.id AND cr.responder_id=?),0))`).bind(responderId).first<{count:number}>();return Number(row?.count??0);}
-function pushPayload(type:"live_chat"|"message"|"async_message",conversationId:string,badge:number):PushPayload{return{
-  type,conversationId,title:type==="live_chat"?"New Focus Lab live chat":"New Focus Lab message",
+function pushPayload(type:"live_chat"|"message"|"async_message",conversationId:string,badge:number,profile=resolveClientBusinessProfile("focus")):PushPayload{return{
+  type,conversationId,title:type==="live_chat"?`New ${profile.shortName} live chat`:`New ${profile.shortName} message`,
   body:type==="live_chat"?"A customer is waiting for a reply.":type==="async_message"?"A customer sent a message. Open Operations to respond.":"Open Operations to respond.",
   url:`/#/chat?conversation=${encodeURIComponent(conversationId)}`,badge,
 };}
 async function sendWebPush(subscription:webpush.PushSubscription,payload:string,options:webpush.RequestOptions){return webpush.sendNotification(subscription,payload,options);}
 function configured(env:Env){return Boolean(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT);}
 function pushStatus(error:unknown){return error instanceof webpush.WebPushError?error.statusCode:typeof error==="object"&&error&&"statusCode" in error&&typeof error.statusCode==="number"?error.statusCode:null;}
-function topic(conversationId:string){return `fl-${conversationId.replace(/[^A-Za-z0-9_-]/g,"").slice(-28)}`.slice(0,32);}
+function topic(conversationId:string,prefix="fl"){return `${prefix}-${conversationId.replace(/[^A-Za-z0-9_-]/g,"").slice(-28)}`.slice(0,32);}
 function safePushEndpoint(value:string){const url=new URL(value);const hostname=url.hostname.toLowerCase();if(hostname==="localhost"||hostname.endsWith(".localhost"))return false;if(/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname))return false;return url.protocol==="https:"&&hostname.includes(".");}
 function invalid(message:string){return Response.json({ok:false,error:{code:"validation_error",message}},{status:422});}
 function unavailable(){return Response.json({ok:false,error:{code:"push_not_configured",message:"Staff notifications are not configured"}},{status:503});}

@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "focus-lab-operations-staging",
+  "main": "../../src/index.ts",
+  "compatibility_date": "2026-08-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "secrets":{"required":["VAPID_PUBLIC_KEY"]},
+  "assets":{"directory":"../../staff-app/dist","binding":"ASSETS","not_found_handling":"single-page-application","run_worker_first":true},
+  "d1_databases":[{"binding":"DB","database_name":"focuslab-crm-staging","database_id":"9a7e55cb-7b26-4521-b48d-bd607e1b207c","migrations_dir":"../../migrations"}],
+  "vars":{
+    "BUSINESS_PROFILE":"focus","DEPLOYMENT_KEY":"focus-lab-console-staging","PUBLIC_API_ENABLED":"false","PUBLIC_SITE_ORIGIN":"",
+    "CONCURRENT_EVENT_CAPACITY":"1","PRESENCE_TIMEOUT_SECONDS":"120","ENVIRONMENT":"staging","STAFF_AUTH_MODE":"access",
+    "STAFF_HOSTNAME":"focus-lab-operations-staging.freedomgeneration1111.workers.dev","ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com",
+    "ACCESS_AUD":"295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000","NATIVE_CHAT_BACKEND":"service"
+  },
+  "services":[{"binding":"CHAT_API","service":"focus-lab-api-staging"}],
+  "observability":{"enabled":true,"logs":{"enabled":true,"head_sampling_rate":1}}
+}

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Operator Operations API
   version: 0.2.0
-  description: Business-neutral operations core. The public inquiry route remains the Focus event adapter; receipt never confirms availability.
+  description: Business-neutral operations core. The Focus deployment enables the public event adapter; deployments with that adapter disabled return 404 module_disabled. Receipt never confirms availability.
 servers:
   - url: http://localhost:8787
 paths:

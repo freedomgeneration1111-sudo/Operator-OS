@@ -1,7 +1,8 @@
 import { createRemoteJWKSet,jwtVerify,type JWTPayload,type JWTVerifyGetKey } from "jose";
+import { resolveClientBusinessProfile } from "../business-profiles.mts";
 
 export type StaffRole="admin"|"manager"|"responder";
-export type StaffAuthEnv={DB:D1Database;ENVIRONMENT?:string;STAFF_AUTH_MODE?:string;ACCESS_TEAM_DOMAIN?:string;ACCESS_AUD?:string;INTERNAL_API_TOKEN?:string};
+export type StaffAuthEnv={DB:D1Database;ENVIRONMENT?:string;STAFF_AUTH_MODE?:string;ACCESS_TEAM_DOMAIN?:string;ACCESS_AUD?:string;INTERNAL_API_TOKEN?:string;BUSINESS_PROFILE?:string};
 export type StaffIdentity={
   id:string;displayName:string;role:StaffRole;verifiedEmail:string|null;accessSubject:string|null;authMode:"development"|"access";
 };
@@ -31,7 +32,7 @@ export async function authenticateStaff(request:Request,env:StaffAuthEnv):Promis
   if(!assertion)throw new AuthenticationError("authentication_required","Cloudflare Access authentication is required");
   const issuer=normalizeIssuer(env.ACCESS_TEAM_DOMAIN);
   const payload=await verifyAccessAssertion(assertion,{issuer,audience:env.ACCESS_AUD});
-  return resolveStaffIdentity(env.DB,payload);
+  return resolveStaffIdentity(env.DB,payload,resolveClientBusinessProfile(env.BUSINESS_PROFILE).shortName);
 }
 
 export async function verifyAccessAssertion(token:string,config:{issuer:string;audience:string},key?:JWTVerifyGetKey):Promise<JWTPayload>{
@@ -47,12 +48,12 @@ export async function verifyAccessAssertion(token:string,config:{issuer:string;a
   }
 }
 
-export async function resolveStaffIdentity(db:D1Database,payload:JWTPayload):Promise<StaffIdentity>{
+export async function resolveStaffIdentity(db:D1Database,payload:JWTPayload,businessName="this business"):Promise<StaffIdentity>{
   const subject=String(payload.sub);const email=String(payload.email).trim().toLowerCase();
   const row=await db.prepare(`SELECT id,display_label,active,role,access_subject,verified_email FROM responders
     WHERE access_subject=? OR (access_subject IS NULL AND lower(verified_email)=?) ORDER BY CASE WHEN access_subject=? THEN 0 ELSE 1 END LIMIT 1`)
     .bind(subject,email,subject).first<Record<string,unknown>>();
-  if(!row)throw new AuthenticationError("staff_not_authorized","This Access identity is not authorized for Focus Lab operations",403);
+  if(!row)throw new AuthenticationError("staff_not_authorized",`This Access identity is not authorized for ${businessName} operations`,403);
   if(Number(row.active)!==1)throw new AuthenticationError("staff_inactive","This staff identity is inactive",403);
   if(!isRole(row.role))throw new AuthenticationError("staff_role_invalid","Staff authorization is misconfigured",403);
   if(!row.access_subject){await db.prepare("UPDATE responders SET access_subject=?,updated_at=? WHERE id=? AND access_subject IS NULL").bind(subject,new Date().toISOString(),String(row.id)).run();}

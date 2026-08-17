@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 import { resolveBusinessProfile,type BusinessProfile } from "../business-profiles.mts";
 import { serviceWorkerFor } from "./src/lib/service-worker-source.mts";
 
-const repositoryRoot=fileURLToPath(new URL("../..",import.meta.url));
+const repositoryRoot=fileURLToPath(new URL("..",import.meta.url));
 
 export default defineConfig(()=>{
   const selected=resolveBusinessProfile(process.env.VITE_BUSINESS_PROFILE);

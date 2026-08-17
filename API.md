@@ -33,6 +33,8 @@
 
 The inquiry application service is the authoritative transaction boundary. The current public route selects the Focus adapter (Event plus requested services); the typed Consulting adapter creates an Inquiry plus Consulting Detail with no Event. Both adapters preserve a bounded approved intake snapshot and queryable attribution. Tokens, honeypots, secrets, auth data, and arbitrary request JSON are excluded from provenance.
 
+Deployment selection is build/config driven. `BUSINESS_PROFILE=focus` enables the existing public event-inquiry adapter and Event/Schedule/Capacity modules. `BUSINESS_PROFILE=moses` disables those modules; `PUBLIC_API_ENABLED=false` also fails closed for public inquiry/chat routes until a business deployment explicitly enables them. Disabled modules return `404 module_disabled` and do not mutate state. Health responses identify the selected business and deployment key without business-specific hardcoding.
+
 Generic list, inbox, detail, and search contracts return Event and Consulting data as optional typed extensions. Eventless inquiries retain workflow, assignments, internal notes, activities, and conversation metadata. Conversations remain valid without either an Inquiry or Event.
 
 All JSON mutation bodies reject unknown fields. Validation failures use `422`; malformed JSON or idempotency metadata uses `400`; missing internal auth uses `401`; missing records use `404`; event-module operations on eventless inquiries use `409` with `event_extension_required`; unexpected persistence failures use a generic `500` without exposing SQL or private data.

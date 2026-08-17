@@ -22,7 +22,7 @@ export function createConfiguredMessagingProvider(provider: string | undefined, 
   };
 }
 
-export async function resolveChatStatus(db: D1Database, provider: MessagingProvider | null, now: string): Promise<ChatStatusResponse> {
+export async function resolveChatStatus(db: D1Database, provider: MessagingProvider | null, now: string, prompt="Hello, I would like to get in touch."): Promise<ChatStatusResponse> {
   if (!provider?.resolveDestination()) return { state: "unavailable", label: "Messaging unavailable", destinationUrl: null, checkedAt: now };
   const row = await db.prepare(`SELECT COUNT(*) AS count FROM responder_presence presence
     JOIN responders responder ON responder.id=presence.responder_id
@@ -30,6 +30,6 @@ export async function resolveChatStatus(db: D1Database, provider: MessagingProvi
   const live = Number(row?.count ?? 0) > 0;
   return {
     state: live ? "live" : "async", label: live ? "Live Chat" : "Send us a DM",
-    destinationUrl: provider.buildDestinationUrl("Hi Focus Lab, I would like to discuss an event."), checkedAt: now,
+    destinationUrl: provider.buildDestinationUrl(prompt), checkedAt: now,
   };
 }

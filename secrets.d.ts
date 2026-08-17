@@ -4,6 +4,9 @@ type TestMigration = { name: string;queries: string[] };
 // merges cover secrets/future environment identifiers and test-only bindings.
 interface Env {
   INTERNAL_API_TOKEN?: string;
+  BUSINESS_PROFILE?: string;
+  DEPLOYMENT_KEY?: string;
+  PUBLIC_API_ENABLED?: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
   MESSAGING_PROVIDER?: string;
@@ -22,6 +25,9 @@ interface Env {
 declare namespace Cloudflare {
   interface Env {
     INTERNAL_API_TOKEN?: string;
+    BUSINESS_PROFILE?: string;
+    DEPLOYMENT_KEY?: string;
+    PUBLIC_API_ENABLED?: string;
     ACCESS_TEAM_DOMAIN?: string;
     ACCESS_AUD?: string;
     MESSAGING_PROVIDER?: string;
