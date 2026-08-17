@@ -20,7 +20,10 @@
     "test:config-isolation": "node --test scripts/deployment-isolation.test.mjs",
     "focus:staging:migrate": "wrangler d1 migrations apply focuslab-crm-staging --remote --config deployments/focus-lab/api.staging.jsonc",
     "focus:staging:deploy:api": "wrangler deploy --config deployments/focus-lab/api.staging.jsonc",
-    "focus:staging:deploy:console": "npm run staff:build:focus:staging && wrangler deploy --config deployments/focus-lab/console.staging.jsonc"
+    "focus:staging:deploy:console": "npm run staff:build:focus:staging && wrangler deploy --config deployments/focus-lab/console.staging.jsonc",
+    "moses:staging:migrate": "wrangler d1 migrations apply moses-operator-crm-staging --remote --config deployments/moses-jorgensen/api.staging.jsonc",
+    "moses:staging:deploy:api": "wrangler deploy --config deployments/moses-jorgensen/api.staging.jsonc",
+    "moses:staging:deploy:console": "npm run staff:build:moses:staging && wrangler deploy --config deployments/moses-jorgensen/console.staging.jsonc"
   },
   "dependencies": {
     "jose": "^6.2.8",

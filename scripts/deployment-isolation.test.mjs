@@ -5,7 +5,7 @@ import test from "node:test";
 const read=(path)=>JSON.parse(readFileSync(new URL(`../${path}`,import.meta.url),"utf8"));
 const inventory={
   focus:{api:read("deployments/focus-lab/api.staging.jsonc"),console:read("deployments/focus-lab/console.staging.jsonc")},
-  moses:{api:read("deployments/moses-jorgensen/api.staging.template.jsonc"),console:read("deployments/moses-jorgensen/console.staging.template.jsonc")},
+  moses:{api:read("deployments/moses-jorgensen/api.staging.jsonc"),console:read("deployments/moses-jorgensen/console.staging.jsonc")},
 };
 const db=(config)=>config.d1_databases[0];
 const vars=(config)=>config.vars;
@@ -44,9 +44,11 @@ test("Focus and Moses resource/security identities never cross",()=>{
   assert.ok(!focus.console.services.some((service)=>service.service===moses.api.name));
 });
 
-test("Moses provisioned data plane remains isolated while Access fails closed",()=>{
+test("Moses provisioned deployment uses final isolated security identifiers",()=>{
   assert.match(db(inventory.moses.api).database_id,/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
   assert.doesNotMatch(db(inventory.moses.api).database_id,/^00000000-/);
-  assert.match(vars(inventory.moses.api).ACCESS_AUD,/_REQUIRED$/);
+  assert.match(vars(inventory.moses.api).ACCESS_AUD,/^[0-9a-f]{64}$/);
+  assert.doesNotMatch(vars(inventory.moses.api).ACCESS_AUD,/_REQUIRED$/);
+  assert.notEqual(vars(inventory.moses.api).ACCESS_AUD,vars(inventory.focus.api).ACCESS_AUD);
   assert.equal(vars(inventory.moses.api).PUBLIC_SITE_ORIGIN,"");
 });
