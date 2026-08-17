@@ -15,5 +15,6 @@
     "ACCESS_AUD":"295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000","NATIVE_CHAT_BACKEND":"service"
   },
   "services":[{"binding":"CHAT_API","service":"focus-lab-api-staging"}],
+  "exports":{"ChatRoom":{"type":"durable-object","state":"deleted"},"StaffChatHub":{"type":"durable-object","state":"deleted"}},
   "observability":{"enabled":true,"logs":{"enabled":true,"head_sampling_rate":1}}
 }
