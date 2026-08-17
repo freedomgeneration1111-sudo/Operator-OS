@@ -12,7 +12,8 @@
     "BUSINESS_PROFILE":"focus","DEPLOYMENT_KEY":"focus-lab-console-staging","PUBLIC_API_ENABLED":"false","PUBLIC_SITE_ORIGIN":"",
     "CONCURRENT_EVENT_CAPACITY":"1","PRESENCE_TIMEOUT_SECONDS":"120","ENVIRONMENT":"staging","STAFF_AUTH_MODE":"access",
     "STAFF_HOSTNAME":"focus-lab-operations-staging.freedomgeneration1111.workers.dev","ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com",
-    "ACCESS_AUD":"295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000","NATIVE_CHAT_BACKEND":"service"
+    "ACCESS_AUD":"295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000","NATIVE_CHAT_BACKEND":"service",
+    "VAPID_KEYSET_ID":"focus-staging-existing"
   },
   "services":[{"binding":"CHAT_API","service":"focus-lab-api-staging"}],
   "exports":{"ChatRoom":{"type":"durable-object","state":"deleted"},"StaffChatHub":{"type":"durable-object","state":"deleted"}},

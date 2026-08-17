@@ -17,6 +17,7 @@ test("each business is internally coherent",()=>{
     assert.equal(vars(business.console).BUSINESS_PROFILE,key);
     assert.equal(db(business.api).database_id,db(business.console).database_id);
     assert.equal(vars(business.api).ACCESS_AUD,vars(business.console).ACCESS_AUD);
+    assert.equal(vars(business.api).VAPID_KEYSET_ID,vars(business.console).VAPID_KEYSET_ID);
     assert.equal(business.console.services[0].service,business.api.name);
     assert.equal(vars(business.console).PUBLIC_API_ENABLED,"false");
     assert.equal("durable_objects" in business.console,false,"console must not own Durable Objects");
@@ -34,6 +35,7 @@ test("Focus and Moses resource/security identities never cross",()=>{
   assert.notEqual(db(focus.api).database_id,db(moses.api).database_id);
   assert.notEqual(db(focus.api).database_name,db(moses.api).database_name);
   assert.notEqual(vars(focus.api).ACCESS_AUD,vars(moses.api).ACCESS_AUD);
+  assert.notEqual(vars(focus.api).VAPID_KEYSET_ID,vars(moses.api).VAPID_KEYSET_ID);
   assert.notEqual(vars(focus.api).DEPLOYMENT_KEY,vars(moses.api).DEPLOYMENT_KEY);
   assert.notEqual(vars(focus.console).STAFF_HOSTNAME,vars(moses.console).STAFF_HOSTNAME);
   assert.ok(!JSON.stringify(moses).match(/focus[ -]?lab|focuslab/i));
@@ -42,8 +44,9 @@ test("Focus and Moses resource/security identities never cross",()=>{
   assert.ok(!focus.console.services.some((service)=>service.service===moses.api.name));
 });
 
-test("Moses templates fail closed until approved resources exist",()=>{
-  assert.match(db(inventory.moses.api).database_id,/^00000000-/);
+test("Moses provisioned data plane remains isolated while Access fails closed",()=>{
+  assert.match(db(inventory.moses.api).database_id,/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
+  assert.doesNotMatch(db(inventory.moses.api).database_id,/^00000000-/);
   assert.match(vars(inventory.moses.api).ACCESS_AUD,/_REQUIRED$/);
   assert.equal(vars(inventory.moses.api).PUBLIC_SITE_ORIGIN,"");
 });

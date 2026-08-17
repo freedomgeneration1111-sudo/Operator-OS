@@ -2,12 +2,12 @@
   "$schema":"../../node_modules/wrangler/config-schema.json",
   "name":"moses-operator-api-staging","main":"../../src/index.ts","compatibility_date":"2026-08-10","compatibility_flags":["nodejs_compat"],"workers_dev":true,
   "secrets":{"required":["VAPID_PUBLIC_KEY","VAPID_PRIVATE_KEY","VAPID_SUBJECT"]},
-  "d1_databases":[{"binding":"DB","database_name":"moses-operator-crm-staging","database_id":"00000000-0000-0000-0000-000000002001","migrations_dir":"../../migrations"}],
+  "d1_databases":[{"binding":"DB","database_name":"moses-operator-crm-staging","database_id":"578a2794-ba0c-43af-9779-6f1594b60a87","migrations_dir":"../../migrations"}],
   "ratelimits":[{"name":"INQUIRY_RATE_LIMITER","namespace_id":"22003","simple":{"limit":10,"period":60}},{"name":"CHAT_RATE_LIMITER","namespace_id":"22004","simple":{"limit":30,"period":60}}],
   "vars":{
     "BUSINESS_PROFILE":"moses","DEPLOYMENT_KEY":"moses-operator-api-staging","PUBLIC_API_ENABLED":"false","PUBLIC_SITE_ORIGIN":"","CUSTOMER_CONVERSATION_ORIGIN":"",
     "CONCURRENT_EVENT_CAPACITY":"1","PRESENCE_TIMEOUT_SECONDS":"120","ENVIRONMENT":"staging","STAFF_AUTH_MODE":"access","STAFF_HOSTNAME":"",
-    "ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com","ACCESS_AUD":"MOSES_STAGING_ACCESS_AUD_REQUIRED"
+    "ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com","ACCESS_AUD":"MOSES_STAGING_ACCESS_AUD_REQUIRED","VAPID_KEYSET_ID":"moses-staging-2026-08-17"
   },
   "observability":{"enabled":true,"logs":{"enabled":true,"head_sampling_rate":1}},
   "durable_objects":{"bindings":[{"name":"CHAT_ROOMS","class_name":"ChatRoom"},{"name":"CHAT_STAFF_HUB","class_name":"StaffChatHub"}]},
