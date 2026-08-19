@@ -5,6 +5,7 @@
 | Endpoint | Method | Auth | Request | Success |
 |---|---|---|---|---|
 | `/v1/inquiries` | POST | Public; `Idempotency-Key` required | Focus event-inquiry fields, optional attribution, Turnstile token, empty honeypot; strict JSON schema | `201` persisted or `200` idempotent replay; real `eventId`; status is `received_for_review`, never availability |
+| `/v1/availability` | GET | Public; rate limited | `?date=YYYY-MM-DD` | `{ date, status: "available"\|"unavailable"\|"unknown", nearby?: [{date,status}] }`; cache-read only, never calls Google Calendar on the request path; no busy intervals or event data ever returned |
 | `/v1/chat/status` | GET | Public | None | Native channel is `live` or `async`; no internal responder data |
 | `/v1/chat/conversations` | POST | Public + rate limit/honeypot | Bounded contact and initial message | Conversation ID, one-time resume token, persisted first message |
 | `/v1/chat/conversations/{id}/messages` | GET/POST | Public resume token | Bounded message with client ID for POST | Public-safe ordered history or persisted message |
@@ -33,7 +34,9 @@
 
 The inquiry application service is the authoritative transaction boundary. The current public route selects the Focus adapter (Event plus requested services); the typed Consulting adapter creates an Inquiry plus Consulting Detail with no Event. Both adapters preserve a bounded approved intake snapshot and queryable attribution. Tokens, honeypots, secrets, auth data, and arbitrary request JSON are excluded from provenance.
 
-Deployment selection is build/config driven. `BUSINESS_PROFILE=focus` enables the existing public event-inquiry adapter and Event/Schedule/Capacity modules. `BUSINESS_PROFILE=moses` disables those modules; `PUBLIC_API_ENABLED=false` also fails closed for public inquiry/chat routes until a business deployment explicitly enables them. Disabled modules return `404 module_disabled` and do not mutate state. Health responses identify the selected business and deployment key without business-specific hardcoding.
+Deployment selection is build/config driven. `BUSINESS_PROFILE=focus` enables the existing public event-inquiry adapter and Event/Schedule/Capacity/Availability modules. `BUSINESS_PROFILE=moses` disables those modules; `PUBLIC_API_ENABLED=false` also fails closed for public inquiry/chat/availability routes until a business deployment explicitly enables them. Disabled modules return `404 module_disabled` and do not mutate state. Health responses identify the selected business and deployment key without business-specific hardcoding.
+
+`GET /v1/availability` never queries Google on the request path: a Cron Trigger (`*/10 * * * *`) calls `refreshAvailabilityCache()`, which authenticates as a Google service account (`GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY`), runs a single `freebusy.query` (never `events.list`) against `GOOGLE_CALENDAR_ID` over a rolling `AVAILABILITY_WINDOW_MONTHS` window in `BUSINESS_TIMEZONE`-local day boundaries, reduces the result to a whole-day busy-date set, and writes it to the `AVAILABILITY_CACHE` KV binding. The request handler only reads that KV entry; if it is missing or older than `AVAILABILITY_CACHE_STALE_MINUTES`, every date resolves to `"unknown"` rather than blocking or erroring. "Nearby" alternative dates (returned only alongside `"unavailable"`) are computed from the same cached busy-date set, so a booked-date response never triggers a second call.
 
 Generic list, inbox, detail, and search contracts return Event and Consulting data as optional typed extensions. Eventless inquiries retain workflow, assignments, internal notes, activities, and conversation metadata. Conversations remain valid without either an Inquiry or Event.
 

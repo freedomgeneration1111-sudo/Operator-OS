@@ -21,6 +21,13 @@ interface Env {
   CUSTOMER_EMAIL_FROM?: string;
   CUSTOMER_CONVERSATION_ORIGIN?: string;
   INQUIRY_RATE_LIMITER?: RateLimit;
+  GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY?: string;
+  GOOGLE_CALENDAR_ID?: string;
+  BUSINESS_TIMEZONE?: string;
+  AVAILABILITY_WINDOW_MONTHS?: string;
+  AVAILABILITY_CACHE_STALE_MINUTES?: string;
+  AVAILABILITY_CACHE?: KVNamespace;
+  AVAILABILITY_RATE_LIMITER?: RateLimit;
 }
 declare namespace Cloudflare {
   interface Env {
@@ -42,6 +49,13 @@ declare namespace Cloudflare {
     CUSTOMER_EMAIL_FROM?: string;
     CUSTOMER_CONVERSATION_ORIGIN?: string;
     INQUIRY_RATE_LIMITER?: RateLimit;
+    GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY?: string;
+    GOOGLE_CALENDAR_ID?: string;
+    BUSINESS_TIMEZONE?: string;
+    AVAILABILITY_WINDOW_MONTHS?: string;
+    AVAILABILITY_CACHE_STALE_MINUTES?: string;
+    AVAILABILITY_CACHE?: KVNamespace;
+    AVAILABILITY_RATE_LIMITER?: RateLimit;
     TEST_MIGRATIONS: TestMigration[];
   }
 }

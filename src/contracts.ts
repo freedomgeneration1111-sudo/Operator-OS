@@ -29,6 +29,7 @@ export const inquiryRequestSchema = z.object({
   utmCampaign: optionalText(200),
   utmTerm: optionalText(200),
   utmContent: optionalText(200),
+  availabilityChecked: z.boolean().optional(),
 }).strict().superRefine((value, context) => {
   if (value.endDate && value.endDate < value.date) {
     context.addIssue({ code: "custom", path: ["endDate"], message: "End date cannot be before start date" });

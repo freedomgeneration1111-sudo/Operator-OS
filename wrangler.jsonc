@@ -1,135 +1,159 @@
 {
-  "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "focus-lab-operations",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-08-10",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-  "assets": {
-    "directory": "staff-app/dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": true
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "focus-lab-operations-local",
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "ratelimits": [
-    {
-      "name": "INQUIRY_RATE_LIMITER",
-      "namespace_id": "12001",
-      "simple": {
-        "limit": 10,
-        "period": 60
-      }
-    },
-    {
-      "name": "CHAT_RATE_LIMITER",
-      "namespace_id": "12005",
-      "simple": {
-        "limit": 30,
-        "period": 60
-      }
-    }
-  ],
-  "vars": {
-    "PUBLIC_SITE_ORIGIN": "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
-    "CONCURRENT_EVENT_CAPACITY": "1",
-    "PRESENCE_TIMEOUT_SECONDS": "120",
-    "ENVIRONMENT": "development",
-    "STAFF_AUTH_MODE": "development",
-    "STAFF_HOSTNAME": "localhost,127.0.0.1"
-  },
-  "observability": {
-    "enabled": true,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1
-    }
-  },
-  "env": {
-    "staging": {
-      "name": "focus-lab-operations-staging",
-      "workers_dev": true,
-      "secrets": {
-        "required": ["VAPID_PUBLIC_KEY"]
-      },
-      "assets": {
-        "directory": "staff-app/dist",
-        "binding": "ASSETS",
-        "not_found_handling": "single-page-application",
-        "run_worker_first": true
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "focuslab-crm-staging",
-          "database_id": "9a7e55cb-7b26-4521-b48d-bd607e1b207c",
-          "migrations_dir": "migrations"
-        }
-      ],
-      "ratelimits": [
-        {
-          "name": "INQUIRY_RATE_LIMITER",
-          "namespace_id": "12002",
-          "simple": {
-            "limit": 10,
-            "period": 60
-          }
-        }
-      ],
-      "vars": {
-        "PUBLIC_SITE_ORIGIN": "",
-        "CONCURRENT_EVENT_CAPACITY": "1",
-        "PRESENCE_TIMEOUT_SECONDS": "120",
-        "ENVIRONMENT": "staging",
-        "STAFF_AUTH_MODE": "access",
-        "STAFF_HOSTNAME": "focus-lab-operations-staging.freedomgeneration1111.workers.dev",
-        "ACCESS_TEAM_DOMAIN": "https://freedomgeneration1111.cloudflareaccess.com",
-        "ACCESS_AUD": "295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000",
-        "NATIVE_CHAT_BACKEND": "service"
-      },
-      "observability": {
-        "enabled": true,
-        "logs": {
-          "enabled": true,
-          "head_sampling_rate": 1
-        }
-      },
-      "services": [
-        {
-          "binding": "CHAT_API",
-          "service": "focus-lab-api-staging"
-        }
-      ]
-    }
-  },
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "CHAT_ROOMS",
-        "class_name": "ChatRoom"
-      },
-      {
-        "name": "CHAT_STAFF_HUB",
-        "class_name": "StaffChatHub"
-      }
-    ]
-  },
-  "exports": {
-    "ChatRoom": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    },
-    "StaffChatHub": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    }
-  }
+	"$schema": "../node_modules/wrangler/config-schema.json",
+	"name": "focus-lab-operations",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-08-10",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "staff-app/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "focus-lab-operations-local",
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "migrations"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "AVAILABILITY_CACHE",
+			"id": "41bd5932cce34db295fe820d491569a3"
+		}
+	],
+	"ratelimits": [
+		{
+			"name": "INQUIRY_RATE_LIMITER",
+			"namespace_id": "12001",
+			"simple": {
+				"limit": 10,
+				"period": 60
+			}
+		},
+		{
+			"name": "CHAT_RATE_LIMITER",
+			"namespace_id": "12005",
+			"simple": {
+				"limit": 30,
+				"period": 60
+			}
+		},
+		{
+			"name": "AVAILABILITY_RATE_LIMITER",
+			"namespace_id": "12006",
+			"simple": {
+				"limit": 20,
+				"period": 60
+			}
+		}
+	],
+	"triggers": {
+		"crons": [
+			"*/10 * * * *"
+		]
+	},
+	"vars": {
+		"PUBLIC_SITE_ORIGIN": "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
+		"CONCURRENT_EVENT_CAPACITY": "1",
+		"PRESENCE_TIMEOUT_SECONDS": "120",
+		"ENVIRONMENT": "development",
+		"STAFF_AUTH_MODE": "development",
+		"STAFF_HOSTNAME": "localhost,127.0.0.1",
+		"BUSINESS_TIMEZONE": "America/Chicago",
+		"AVAILABILITY_WINDOW_MONTHS": "6",
+		"AVAILABILITY_CACHE_STALE_MINUTES": "30"
+	},
+	"observability": {
+		"enabled": true,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1
+		}
+	},
+	"env": {
+		"staging": {
+			"name": "focus-lab-operations-staging",
+			"workers_dev": true,
+			"secrets": {
+				"required": [
+					"VAPID_PUBLIC_KEY"
+				]
+			},
+			"assets": {
+				"directory": "staff-app/dist",
+				"binding": "ASSETS",
+				"not_found_handling": "single-page-application",
+				"run_worker_first": true
+			},
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "focuslab-crm-staging",
+					"database_id": "9a7e55cb-7b26-4521-b48d-bd607e1b207c",
+					"migrations_dir": "migrations"
+				}
+			],
+			"ratelimits": [
+				{
+					"name": "INQUIRY_RATE_LIMITER",
+					"namespace_id": "12002",
+					"simple": {
+						"limit": 10,
+						"period": 60
+					}
+				}
+			],
+			"vars": {
+				"PUBLIC_SITE_ORIGIN": "",
+				"CONCURRENT_EVENT_CAPACITY": "1",
+				"PRESENCE_TIMEOUT_SECONDS": "120",
+				"ENVIRONMENT": "staging",
+				"STAFF_AUTH_MODE": "access",
+				"STAFF_HOSTNAME": "focus-lab-operations-staging.freedomgeneration1111.workers.dev",
+				"ACCESS_TEAM_DOMAIN": "https://freedomgeneration1111.cloudflareaccess.com",
+				"ACCESS_AUD": "295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000",
+				"NATIVE_CHAT_BACKEND": "service"
+			},
+			"observability": {
+				"enabled": true,
+				"logs": {
+					"enabled": true,
+					"head_sampling_rate": 1
+				}
+			},
+			"services": [
+				{
+					"binding": "CHAT_API",
+					"service": "focus-lab-api-staging"
+				}
+			]
+		}
+	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "CHAT_ROOMS",
+				"class_name": "ChatRoom"
+			},
+			{
+				"name": "CHAT_STAFF_HUB",
+				"class_name": "StaffChatHub"
+			}
+		]
+	},
+	"exports": {
+		"ChatRoom": {
+			"type": "durable-object",
+			"storage": "sqlite"
+		},
+		"StaffChatHub": {
+			"type": "durable-object",
+			"storage": "sqlite"
+		}
+	}
 }

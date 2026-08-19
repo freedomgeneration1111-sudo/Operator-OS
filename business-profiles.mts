@@ -2,6 +2,7 @@ export type BusinessCapabilities={
   event:boolean;
   schedule:boolean;
   capacity:boolean;
+  availability:boolean;
 };
 export type BusinessVocabulary={
   inquirySingular:string;
@@ -30,14 +31,14 @@ const profiles:Record<BusinessProfile["key"],BuildProfile>={
     appDescription:"Internal CRM and responder workspace for Focus Lab Productions.",logoUrl:"/app-mark.svg",
     logoSource:"business/focus-lab/focus-lab-mark.svg",publicEventInquiry:true,publicChat:true,
     messagingPrompt:"Hi Focus Lab, I would like to discuss an event.",pushTopicPrefix:"fl",
-    capabilities:{event:true,schedule:true,capacity:true},
+    capabilities:{event:true,schedule:true,capacity:true,availability:true},
     vocabulary:{inquirySingular:"inquiry",inquiryPlural:"inquiries",customerSingular:"customer"},
   },
   moses:{
     key:"moses",businessName:"Moses Jorgensen",shortName:"Moses",appName:"Moses Operations",
     appDescription:"Internal CRM and responder workspace for Moses Jorgensen.",logoUrl:null,logoSource:null,publicEventInquiry:false,publicChat:false,
     messagingPrompt:"Hi Moses, I would like to discuss consulting.",pushTopicPrefix:"mj",
-    capabilities:{event:false,schedule:false,capacity:false},
+    capabilities:{event:false,schedule:false,capacity:false,availability:false},
     vocabulary:{inquirySingular:"inquiry",inquiryPlural:"inquiries",customerSingular:"client"},
   },
 };

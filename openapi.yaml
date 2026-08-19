@@ -28,6 +28,36 @@ paths:
         '503': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
         '500': { $ref: '#/components/responses/Error' }
+  /v1/availability:
+    get:
+      summary: Resolve a single date's booking status from the cached Google Calendar busy-date set
+      parameters:
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+      responses:
+        '200':
+          description: Cache-read availability signal; never raw busy intervals or event data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok,date,status]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  date: { type: string, format: date }
+                  status: { enum: [available,unavailable,unknown] }
+                  nearby:
+                    type: array
+                    description: Present only when status is unavailable
+                    items:
+                      type: object
+                      required: [date,status]
+                      properties: { date: { type: string, format: date }, status: { enum: [available,unavailable,unknown] } }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
   /v1/chat/status:
     get:
       summary: Resolve native website chat state from confirmed responder presence

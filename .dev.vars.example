@@ -8,3 +8,12 @@ INTERNAL_API_TOKEN=replace-with-a-long-random-development-token
 # Required for real local inquiry submission. Use an official Cloudflare test
 # secret for automated/local testing only; never reuse it in staging/production.
 # TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+# Required for local availability-cache testing against a real "Focus Lab —
+# Bookings" calendar. GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY is the full service
+# account JSON key file content as a single-line string; GOOGLE_CALENDAR_ID is
+# the calendar's ID (its "Integrate calendar" address in Google Calendar
+# settings). Never commit real values. Without these set, the scheduled cache
+# refresh silently no-ops and /v1/availability always reports "unknown".
+# GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY={"client_email":"...","private_key":"..."}
+# GOOGLE_CALENDAR_ID=xxxxxxxxxxxx@group.calendar.google.com
