@@ -5,7 +5,7 @@
   "compatibility_date": "2026-08-10",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "secrets": {"required": ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT", "GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY", "GOOGLE_CALENDAR_ID"]},
+  "secrets": {"required": ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"]},
   "d1_databases": [{"binding":"DB","database_name":"focuslab-crm-staging","database_id":"9a7e55cb-7b26-4521-b48d-bd607e1b207c","migrations_dir":"../../migrations"}],
   "kv_namespaces": [{"binding":"AVAILABILITY_CACHE","id":"41bd5932cce34db295fe820d491569a3"}],
   "ratelimits": [
