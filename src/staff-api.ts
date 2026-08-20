@@ -108,12 +108,12 @@ async function conversations(db: D1Database,params: URLSearchParams,responderId:
   const term = query ? `%${query}%` : null;
   const result = term
     ? await db.prepare(`SELECT cv.id,cv.provider,cv.external_conversation_id,cv.channel_state,cv.updated_at,
-        cv.inquiry_id,cv.event_id,cv.assigned_responder_id,cv.last_message_at,c.full_name,e.event_family,e.start_date,
+        cv.inquiry_id,cv.event_id,cv.assigned_responder_id,cv.last_message_at,cv.reply_email,cv.reply_sms,cv.reply_call,c.full_name,e.event_family,e.start_date,
         (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.conversation_id=cv.id AND cm.sender_kind='customer' AND cm.sequence>COALESCE((SELECT cr.last_read_sequence FROM conversation_reads cr WHERE cr.conversation_id=cv.id AND cr.responder_id=?),0)) AS unread_count FROM conversations cv
         JOIN contacts c ON c.id=cv.contact_id LEFT JOIN events e ON e.id=cv.event_id
         WHERE c.full_name LIKE ? OR cv.external_conversation_id LIKE ? OR cv.provider LIKE ? ORDER BY cv.updated_at DESC LIMIT 100`).bind(responderId,term,term,term).all()
     : await db.prepare(`SELECT cv.id,cv.provider,cv.external_conversation_id,cv.channel_state,cv.updated_at,
-        cv.inquiry_id,cv.event_id,cv.assigned_responder_id,cv.last_message_at,c.full_name,e.event_family,e.start_date,
+        cv.inquiry_id,cv.event_id,cv.assigned_responder_id,cv.last_message_at,cv.reply_email,cv.reply_sms,cv.reply_call,c.full_name,e.event_family,e.start_date,
         (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.conversation_id=cv.id AND cm.sender_kind='customer' AND cm.sequence>COALESCE((SELECT cr.last_read_sequence FROM conversation_reads cr WHERE cr.conversation_id=cv.id AND cr.responder_id=?),0)) AS unread_count FROM conversations cv
         JOIN contacts c ON c.id=cv.contact_id LEFT JOIN events e ON e.id=cv.event_id ORDER BY cv.updated_at DESC LIMIT 100`).bind(responderId).all();
   return Response.json({ ok:true,conversations:result.results });

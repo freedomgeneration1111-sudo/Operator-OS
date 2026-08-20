@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requirePermission,type StaffIdentity } from "./auth";
+import { sendOpsNotification } from "./ops-notify";
 import { hashResumeToken,markCustomerConversationResumed,randomResumeToken,resolveConversationResumeToken } from "./resume-tokens";
 
 const startSchema=z.object({
@@ -9,7 +10,14 @@ const startSchema=z.object({
   message:z.string().trim().min(1).max(2000),
   clientMessageId:z.string().trim().min(8).max(128),
   website:z.string().trim().max(300).optional().default(""),
-}).strict();
+  replyEmail:z.boolean().optional().default(true),
+  replySms:z.boolean().optional().default(false),
+  replyCall:z.boolean().optional().default(false),
+}).strict().superRefine((value,context)=>{
+  if(!value.replyEmail&&!value.replySms&&!value.replyCall)context.addIssue({code:"custom",path:["replyEmail"],message:"Select at least one reply method"});
+  if(value.replyEmail&&!value.email)context.addIssue({code:"custom",path:["email"],message:"Email is required to reply by email"});
+  if((value.replySms||value.replyCall)&&!value.phone)context.addIssue({code:"custom",path:["phone"],message:"Phone is required to reply by text or call"});
+});
 const messageSchema=z.object({body:z.string().trim().min(1).max(2000),clientMessageId:z.string().trim().min(8).max(128)}).strict();
 const assignmentSchema=z.object({responderId:z.string().trim().min(1).max(100).nullable()}).strict();
 
@@ -22,7 +30,7 @@ export async function nativeChatStatus(db:D1Database,now:string){
   return {state:live?"live":"async",label:live?"Live Chat":"Send us a Message",destinationUrl:null,checkedAt:now};
 }
 
-export async function startNativeConversation(request:Request,env:Env){
+export async function startNativeConversation(request:Request,env:Env,ctx:ExecutionContext){
   const parsed=startSchema.safeParse(await request.json().catch(()=>null));
   if(!parsed.success)throw new NativeChatError(422,"validation_error","Please check the highlighted chat details");
   if(parsed.data.website)throw new NativeChatError(400,"invalid_submission","The message could not be sent");
@@ -30,8 +38,9 @@ export async function startNativeConversation(request:Request,env:Env){
   const now=new Date().toISOString();const proposedContactId=crypto.randomUUID();const conversationId=crypto.randomUUID();const resumeToken=randomResumeToken();const tokenHash=await hashResumeToken(resumeToken);const email=parsed.data.email.toLowerCase();
   await env.DB.prepare(`INSERT OR IGNORE INTO contacts (id,full_name,email,phone,preferred_contact,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`).bind(proposedContactId,parsed.data.name,email,parsed.data.phone||null,"email",now,now).run();
   const contact=await env.DB.prepare("SELECT id FROM contacts WHERE lower(email)=?").bind(email).first<{id:string}>();if(!contact)throw new NativeChatError(500,"conversation_not_saved","The conversation could not be created");
-  await env.DB.prepare(`INSERT INTO conversations (id,contact_id,provider,channel_state,public_resume_token_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`).bind(conversationId,contact.id,"native_web","open",tokenHash,now,now).run();
+  await env.DB.prepare(`INSERT INTO conversations (id,contact_id,provider,channel_state,public_resume_token_hash,reply_email,reply_sms,reply_call,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(conversationId,contact.id,"native_web","open",tokenHash,parsed.data.replyEmail?1:0,parsed.data.replySms?1:0,parsed.data.replyCall?1:0,now,now).run();
   const result=await persistThroughRoom(env,conversationId,{senderKind:"customer",senderResponderId:null,body:parsed.data.message,clientMessageId:parsed.data.clientMessageId});
+  ctx.waitUntil(sendOpsNotification(env,{name:parsed.data.name,email,phone:parsed.data.phone||null,message:parsed.data.message,replyEmail:parsed.data.replyEmail,replySms:parsed.data.replySms,replyCall:parsed.data.replyCall}).catch((error)=>console.warn(JSON.stringify({message:"ops notification failed",conversationId,error:error instanceof Error?error.message:"Unknown error"}))));
   return Response.json({ok:true,conversation:{id:conversationId,resumeToken,mode:(await nativeChatStatus(env.DB,now)).state},...result},{status:201,headers:{"Cache-Control":"no-store"}});
 }
 
@@ -92,7 +101,7 @@ export async function internalConversationRoute(request:Request,env:Env,path:str
 
 async function conversationDetail(db:D1Database,id:string,responderId:string){
   const [conversation,messages,activity,notification]=await db.batch([
-    db.prepare(`SELECT cv.id,cv.provider,cv.channel_state,cv.assigned_responder_id,cv.created_at,cv.updated_at,cv.last_message_at,c.full_name,c.email,c.phone,r.display_label AS assigned_responder_label FROM conversations cv JOIN contacts c ON c.id=cv.contact_id LEFT JOIN responders r ON r.id=cv.assigned_responder_id WHERE cv.id=?`).bind(id),
+    db.prepare(`SELECT cv.id,cv.provider,cv.channel_state,cv.assigned_responder_id,cv.created_at,cv.updated_at,cv.last_message_at,cv.reply_email,cv.reply_sms,cv.reply_call,c.full_name,c.email,c.phone,r.display_label AS assigned_responder_label FROM conversations cv JOIN contacts c ON c.id=cv.contact_id LEFT JOIN responders r ON r.id=cv.assigned_responder_id WHERE cv.id=?`).bind(id),
     db.prepare(`SELECT m.id,m.client_message_id,m.sequence,m.sender_kind,m.sender_responder_id,m.body,m.created_at,r.display_label AS sender_label FROM conversation_messages m LEFT JOIN responders r ON r.id=m.sender_responder_id WHERE m.conversation_id=? ORDER BY m.sequence LIMIT 500`).bind(id),
     db.prepare("SELECT actor_kind,actor_id,activity_type,metadata_json,created_at FROM conversation_activity WHERE conversation_id=? ORDER BY created_at DESC LIMIT 100").bind(id),
     db.prepare("SELECT status,provider,attempted_at,completed_at,failure_code,cleared_at FROM conversation_notifications WHERE conversation_id=? ORDER BY attempted_at DESC LIMIT 1").bind(id),

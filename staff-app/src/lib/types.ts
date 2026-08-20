@@ -42,7 +42,7 @@ export type ScheduleEvent={
   venue_location:string|null;blocks_capacity:number;scheduling_state:string;inquiry_id:string;workflow_state:WorkflowState;
   full_name:string;services:string|null;assessment:Assessment;
 };
-export type Conversation={ id:string;provider:string;external_conversation_id:string|null;channel_state:string;updated_at:string;inquiry_id:string|null;event_id:string|null;full_name:string;event_family:string|null;start_date:string|null;assigned_responder_id:string|null;last_message_at:string|null;unread_count:number };
+export type Conversation={ id:string;provider:string;external_conversation_id:string|null;channel_state:string;updated_at:string;inquiry_id:string|null;event_id:string|null;full_name:string;event_family:string|null;start_date:string|null;assigned_responder_id:string|null;last_message_at:string|null;unread_count:number;reply_email:number;reply_sms:number;reply_call:number };
 export type ChatMessage={id:string;client_message_id:string;sequence:number;sender_kind:"customer"|"responder"|"system";sender_responder_id?:string|null;sender_label?:string|null;body:string;created_at:string};
 export type CustomerNotification={status:"pending"|"accepted"|"failed";provider:string;attempted_at:string;completed_at:string|null;failure_code:string|null;cleared_at:string|null};
 export type ConversationDetail={ok:true;conversation:Conversation&{email:string;phone:string|null;assigned_responder_label:string|null;created_at:string};messages:ChatMessage[];activity:Array<{actor_kind:string;actor_id:string|null;activity_type:string;metadata_json:string;created_at:string}>;customerNotification:CustomerNotification|null};

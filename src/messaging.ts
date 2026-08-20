@@ -28,6 +28,9 @@ export async function resolveChatStatus(db: D1Database, provider: MessagingProvi
     JOIN responders responder ON responder.id=presence.responder_id
     WHERE responder.active=1 AND presence.available=1 AND presence.expires_at>?`).bind(now).first<{ count: number }>();
   const live = Number(row?.count ?? 0) > 0;
+  // Legacy status-dashboard label only (feeds GET /v1/internal/status's `messaging` field).
+  // No customer ever sees "Send us a DM" — the real customer-facing async label is
+  // "Send us a Message", set in native-chat.ts's nativeChatStatus().
   return {
     state: live ? "live" : "async", label: live ? "Live Chat" : "Send us a DM",
     destinationUrl: provider.buildDestinationUrl(prompt), checkedAt: now,

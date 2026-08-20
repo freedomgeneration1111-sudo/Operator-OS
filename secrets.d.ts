@@ -20,6 +20,7 @@ interface Env {
   RESEND_API_KEY?: string;
   CUSTOMER_EMAIL_FROM?: string;
   CUSTOMER_CONVERSATION_ORIGIN?: string;
+  OPS_NOTIFY_EMAIL?: string;
   INQUIRY_RATE_LIMITER?: RateLimit;
   GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY?: string;
   GOOGLE_CALENDAR_ID?: string;
@@ -48,6 +49,7 @@ declare namespace Cloudflare {
     RESEND_API_KEY?: string;
     CUSTOMER_EMAIL_FROM?: string;
     CUSTOMER_CONVERSATION_ORIGIN?: string;
+    OPS_NOTIFY_EMAIL?: string;
     INQUIRY_RATE_LIMITER?: RateLimit;
     GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY?: string;
     GOOGLE_CALENDAR_ID?: string;

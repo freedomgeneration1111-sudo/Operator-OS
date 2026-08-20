@@ -11,4 +11,15 @@ describe("native website chat",()=>{
   it("lets authenticated staff read, reply, assign, and mark read",async()=>{const created=await (await start()).json<{conversation:{id:string}}>();const base=`https://operations.example.test/v1/internal/conversations/${created.conversation.id}`;expect((await exports.default.fetch(new Request(base))).status).toBe(401);let response=await exports.default.fetch(new Request(base,{headers:auth}));expect(response.status).toBe(200);response=await exports.default.fetch(new Request(`${base}/assignment`,{method:"PATCH",headers:auth,body:JSON.stringify({responderId:responder})}));expect(response.status).toBe(200);response=await exports.default.fetch(new Request(`${base}/messages`,{method:"POST",headers:auth,body:JSON.stringify({body:"Synthetic staff response",clientMessageId:crypto.randomUUID()})}));expect(response.status).toBe(201);expect(await env.DB.prepare("SELECT sender_responder_id FROM conversation_messages WHERE sender_kind='responder'").first<string>("sender_responder_id")).toBe(responder);});
   it("uses confirmed presence for live versus async",async()=>{let status=await (await exports.default.fetch(new Request("https://operations.example.test/v1/chat/status"))).json<{state:string}>();expect(status.state).toBe("async");await exports.default.fetch(new Request("https://operations.example.test/v1/internal/presence/heartbeat",{method:"POST",headers:auth,body:JSON.stringify({available:true})}));status=await (await exports.default.fetch(new Request("https://operations.example.test/v1/chat/status"))).json();expect(status.state).toBe("live");});
   it("rejects malformed and honeypot submissions safely",async()=>{expect((await start({message:""})).status).toBe(422);expect((await start({website:"spam.example"})).status).toBe(400);});
+  it("persists reply preferences and validates required contact info",async()=>{
+    const defaulted=await (await start()).json<{conversation:{id:string}}>();
+    const defaultedRow=await env.DB.prepare("SELECT reply_email,reply_sms,reply_call FROM conversations WHERE id=?").bind(defaulted.conversation.id).first<{reply_email:number;reply_sms:number;reply_call:number}>();
+    expect(defaultedRow).toMatchObject({reply_email:1,reply_sms:0,reply_call:0});
+    expect((await start({replyEmail:false,replySms:false,replyCall:false})).status).toBe(422);
+    expect((await start({replySms:true})).status).toBe(422);
+    expect((await start({replyCall:true})).status).toBe(422);
+    const withPhone=await (await start({replySms:true,replyCall:true,phone:"555-0100"})).json<{conversation:{id:string}}>();
+    const phoneRow=await env.DB.prepare("SELECT reply_sms,reply_call FROM conversations WHERE id=?").bind(withPhone.conversation.id).first<{reply_sms:number;reply_call:number}>();
+    expect(phoneRow).toMatchObject({reply_sms:1,reply_call:1});
+  });
 });
