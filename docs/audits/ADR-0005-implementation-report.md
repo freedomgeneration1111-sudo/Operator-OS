@@ -4,9 +4,13 @@ Implements `docs/adr/ADR-0005-decouple-whatsapp-secrets-enable-moses-chat.md`
 (copied into this repo from the CC prompt's source — it did not previously
 exist under `docs/adr/`). Worked through the six sections of the
 implementation prompt in order. Sections 1–4 are fully verified with real
-command output. Sections 5–6 (live HTTP tests) hit a **new, unplanned
-blocker independent of this ADR's own changes** — documented in full below,
-not glossed over.
+command output. Sections 5–6 (live HTTP tests) initially hit a new,
+unplanned blocker independent of this ADR's own changes — a stray
+Cloudflare Access Application in front of the whole API worker hostname.
+The user resolved that separately (Cloudflare dashboard, outside this
+repo); **Sections 5–6 were then re-run live and passed — see "Update:
+Access wall resolved, live verification complete" at the end of this
+report.**
 
 ## 1 — WhatsApp code safety before touching config
 
@@ -294,21 +298,134 @@ message to moses's Worker would now trigger a real Resend email send**,
 not the "not configured" skip the ADR-0004 report observed. Not tested
 here — no live HTTP reached the Worker at all this session.
 
+## Update: Access wall resolved, live verification complete
+
+The user removed/rescoped the stray Access Application (Cloudflare
+dashboard, outside this repo) after the above was reported. Re-verified
+directly afterward — every command below is real, run against the live
+`moses-operator-api-staging` Worker, no summarized assumptions.
+
+**Access wall confirmed gone:**
+```
+$ curl -sI https://moses-operator-api-staging.freedomgeneration1111.workers.dev/
+HTTP/2 404   # clean JSON 404, no Access redirect — matches focus's behavior now
+
+$ curl -s https://moses-operator-api-staging.freedomgeneration1111.workers.dev/v1/chat/status
+{"state":"async","label":"Send us a Message","destinationUrl":null,"checkedAt":"2026-08-25T14:31:27.078Z"}
+HTTP status: 200
+```
+
+**Section 5 — native chat, new thread + follow-up, both accepted live:**
+```
+$ curl -s -X POST https://moses-operator-api-staging.freedomgeneration1111.workers.dev/v1/chat/conversations \
+  -d '{"name":"ADR-0005 Test Customer","email":"adr0005-test@example.test","phone":"555-0199",
+       "message":"ADR-0005 live test — new thread","clientMessageId":"adr0005-test-...-001",
+       "replyEmail":true,"replySms":false,"replyCall":false}'
+{"ok":true,"conversation":{"id":"6b984668-6a36-4f53-95df-d686b3bbd19c","resumeToken":"24a3959d...","mode":"async"},
+ "message":{"sequence":1,"sender_kind":"customer","body":"ADR-0005 live test — new thread",...}}
+HTTP status: 201
+
+$ curl -s -X POST ".../v1/chat/conversations/6b984668.../messages" \
+  -H "X-Chat-Resume-Token: 24a3959d..." \
+  -d '{"body":"ADR-0005 live test — follow-up message","clientMessageId":"adr0005-test-...-002"}'
+{"ok":true,"message":{"sequence":2,"sender_kind":"customer","body":"ADR-0005 live test — follow-up message",...}}
+HTTP status: 201
+```
+
+**Email notification — real delivery confirmed, not just a dispatch log.**
+Per the incidental finding above, `RESEND_API_KEY`/`CUSTOMER_EMAIL_FROM`
+are now provisioned for moses, so `dispatchOpsNotificationEmail` no longer
+hits its "skipped: not configured" path — and since it logs nothing on
+success (fire-and-forget via `ctx.waitUntil`, see `src/chat-durable.ts`'s
+`deliver()`), the real proof is the inbox itself, checked directly via
+Gmail:
+
+```
+Thread 1a039558a7bcccf1 — "New message from ADR-0005 Test Customer — Moses"
+  from: notifications@mosesjorgensen.com  to: freedomgeneration1111@gmail.com
+  2 messages: 14:31:41 (new thread, sequence 1) and 14:32:00 (follow-up, sequence 2)
+
+Thread 1a03959e61cf0fa9 — "New message from ADR-0005 Tail Test Customer — Moses"
+  from: notifications@mosesjorgensen.com  to: freedomgeneration1111@gmail.com
+  14:36:27 — third test conversation (e5dab04e-f5d1-45b1-a5a3-4dff25cf2f1a)
+```
+
+Full body of the third email (`get_thread`, plain text):
+```
+New message from ADR-0005 Tail Test Customer
+
+ADR-0005 live test — tail capture
+
+Email: adr0005-tail-test@example.test
+Phone: 555-0198
+Reply preferences: Email
+
+Open in staff console: https://staff.mosesjorgensen.com/#/chat?conversation=e5dab04e-f5d1-45b1-a5a3-4dff25cf2f1a
+```
+(The raw plaintext extraction mangled the `=` before the conversation ID
+into a stray byte in one earlier read — re-confirmed here the actual
+conversation ID matches the API response exactly, `e5dab04e-...-2f1a`; this
+is a plaintext-conversion display artifact, not a defect in the sent
+email.) All three timestamps and all three message bodies line up exactly
+with the three live `POST` calls made during this test. This is real,
+unambiguous evidence the relocated email trigger fires correctly for
+moses, end to end, including the deep link shape from ADR-0004.
+
+**Push notification — legitimately no delivery, and confirmed why.**
+```
+$ npx wrangler d1 execute moses-operator-crm-staging --remote --config deployments/moses-jorgensen/api.staging.jsonc \
+  --command "SELECT * FROM push_deliveries WHERE conversation_id='6b984668-6a36-4f53-95df-d686b3bbd19c'"
+[] # no rows
+
+$ npx wrangler d1 execute moses-operator-crm-staging --remote --config deployments/moses-jorgensen/api.staging.jsonc \
+  --command "SELECT id,role,active FROM responders"
+[{"id":"responder_moses","role":"admin","active":1}]
+
+$ npx wrangler d1 execute moses-operator-crm-staging --remote --config deployments/moses-jorgensen/api.staging.jsonc \
+  --command "SELECT id,responder_id FROM push_subscriptions"
+[] # no rows
+```
+`src/push.ts:81-84` queries `push_subscriptions` for the routed
+responder(s); with zero rows there, `dispatchPushEvent` correctly no-ops
+(nothing to push to, nothing to fail) — moses has one active responder but
+no device has ever subscribed to push for this tenant. Not a bug; not
+tested further here since there's no subscribed device to verify delivery
+against (parallel to how the ADR-0004 report could only test push against
+`focus`, which had real registered subscriptions).
+
+**Section 6 — WhatsApp degrades cleanly, live, real HTTP:**
+```
+$ curl -s -X POST .../v1/webhooks/whatsapp -d '{"entry":[]}'
+WhatsApp is not configured for this deployment
+HTTP status: 503
+
+$ curl -s -X POST .../v1/webhooks/whatsapp -H "X-Hub-Signature-256: sha256=deadbeef" -d '{"entry":[]}'
+WhatsApp is not configured for this deployment
+HTTP status: 503
+
+$ curl -s ".../v1/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=echo123"
+Forbidden
+HTTP status: 403
+```
+The Section 1 guard fires exactly as designed over real HTTP, with the
+four secrets still genuinely absent: a clean `503` from the new guard
+(both with and without a garbage signature header — the guard fires before
+signature verification is even attempted), and the pre-existing `403` for
+the GET verify handshake. No 500s, no crashes, on the one tenant where
+this actually matters.
+
+**Test data note.** This live-testing pass created three real
+conversations in moses's production D1 (`moses-operator-crm-staging`) and
+sent three real emails to `freedomgeneration1111@gmail.com` (the account
+owner's own address, configured as `OPS_NOTIFY_EMAIL` for this tenant) —
+same testing pattern the ADR-0004 report used against `focus`, no
+third-party ever contacted.
+
 ## What's still open
 
-1. **The Access Application blocking `moses-operator-api-staging`'s own
-   hostname** (Section 5/6) — needs an explicit decision on scope/removal
-   before native chat (or WhatsApp, once its secrets exist) can actually
-   receive real traffic. This is the one item that must be resolved before
-   this ADR's stated goal is functionally live, not just deployed.
-2. Once (1) is resolved: repeat the Section 5 live test
-   (`/v1/chat/status`, `POST /v1/chat/conversations`) against moses's
-   Worker for real, and confirm the relocated email/push notifications —
-   which, per the incidental finding above, may now actually deliver a
-   real email, not just log a skip.
-3. Once (1) is resolved: repeat the Section 6 test — hit
-   `/v1/webhooks/whatsapp` with the four secrets still absent and confirm
-   the real HTTP response is the `503` from Section 1, not the Access
-   wall.
-4. WhatsApp itself remains blocked on Meta/Facebook Developer verification
+1. WhatsApp itself remains blocked on Meta/Facebook Developer verification
    — unchanged, out of scope per the ADR.
+2. Moses has no registered push subscription (no device has opted into
+   staff push for this tenant), so `opsNotifyPush` is code-complete and
+   live but unverified end-to-end here — same as it was before this ADR.
+   Not blocking; would need a real staff device to subscribe first.
