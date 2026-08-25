@@ -50,5 +50,6 @@ test("Moses provisioned deployment uses final isolated security identifiers",()=
   assert.match(vars(inventory.moses.api).ACCESS_AUD,/^[0-9a-f]{64}$/);
   assert.doesNotMatch(vars(inventory.moses.api).ACCESS_AUD,/_REQUIRED$/);
   assert.notEqual(vars(inventory.moses.api).ACCESS_AUD,vars(inventory.focus.api).ACCESS_AUD);
-  assert.equal(vars(inventory.moses.api).PUBLIC_SITE_ORIGIN,"");
+  assert.match(vars(inventory.moses.api).PUBLIC_SITE_ORIGIN,/^https:\/\//);
+  assert.notEqual(vars(inventory.moses.api).PUBLIC_SITE_ORIGIN,vars(inventory.focus.api).PUBLIC_SITE_ORIGIN);
 });
