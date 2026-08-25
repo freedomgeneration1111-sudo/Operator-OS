@@ -21,6 +21,7 @@ interface Env {
   CUSTOMER_EMAIL_FROM?: string;
   CUSTOMER_CONVERSATION_ORIGIN?: string;
   OPS_NOTIFY_EMAIL?: string;
+  STAFF_CONSOLE_ORIGIN?: string;
   INQUIRY_RATE_LIMITER?: RateLimit;
   GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY?: string;
   GOOGLE_CALENDAR_ID?: string;
@@ -29,6 +30,11 @@ interface Env {
   AVAILABILITY_CACHE_STALE_MINUTES?: string;
   AVAILABILITY_CACHE?: KVNamespace;
   AVAILABILITY_RATE_LIMITER?: RateLimit;
+  WHATSAPP_ACCESS_TOKEN?: string;
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+  WHATSAPP_APP_SECRET?: string;
+  WHATSAPP_WEBHOOK_RATE_LIMITER?: RateLimit;
 }
 declare namespace Cloudflare {
   interface Env {
@@ -50,6 +56,7 @@ declare namespace Cloudflare {
     CUSTOMER_EMAIL_FROM?: string;
     CUSTOMER_CONVERSATION_ORIGIN?: string;
     OPS_NOTIFY_EMAIL?: string;
+    STAFF_CONSOLE_ORIGIN?: string;
     INQUIRY_RATE_LIMITER?: RateLimit;
     GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY?: string;
     GOOGLE_CALENDAR_ID?: string;
@@ -58,6 +65,11 @@ declare namespace Cloudflare {
     AVAILABILITY_CACHE_STALE_MINUTES?: string;
     AVAILABILITY_CACHE?: KVNamespace;
     AVAILABILITY_RATE_LIMITER?: RateLimit;
+    WHATSAPP_ACCESS_TOKEN?: string;
+    WHATSAPP_PHONE_NUMBER_ID?: string;
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+    WHATSAPP_APP_SECRET?: string;
+    WHATSAPP_WEBHOOK_RATE_LIMITER?: RateLimit;
     TEST_MIGRATIONS: TestMigration[];
   }
 }

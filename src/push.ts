@@ -77,7 +77,7 @@ export async function sendTestNotification(env:Env,responderId:string,endpoint:s
 }
 
 export async function dispatchPushEvent(env:Env,event:PushEvent,send:PushSender=sendWebPush):Promise<void>{
-  if(event.senderKind!=="customer"||!configured(env))return;
+  if(event.senderKind!=="customer"||!resolveClientBusinessProfile(env.BUSINESS_PROFILE).capabilities.opsNotifyPush||!configured(env))return;
   const now=new Date().toISOString();const routing=await routeResponders(env.DB,event.assignedResponderId,now);if(!routing.responderIds.length)return;
   const placeholders=routing.responderIds.map(()=>"?").join(",");
   const rows=await env.DB.prepare(`SELECT id,responder_id,endpoint,p256dh,auth FROM push_subscriptions

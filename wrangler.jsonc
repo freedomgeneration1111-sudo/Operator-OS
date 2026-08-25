@@ -79,12 +79,6 @@
 		"staging": {
 			"name": "focus-lab-operations-staging",
 			"workers_dev": true,
-			"routes": [
-				{
-					"pattern": "staff.focuslabproductions.com",
-					"custom_domain": true
-				}
-			],
 			"secrets": {
 				"required": [
 					"VAPID_PUBLIC_KEY"

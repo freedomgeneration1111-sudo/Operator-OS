@@ -26,7 +26,7 @@ test("each business is internally coherent",()=>{
     if(key==="focus")assert.ok(Object.values(business.console.exports).every((entry)=>entry.state==="deleted"),"legacy console DO exports must remain explicit tombstones");
   }
   assert.equal(vars(inventory.focus.api).PUBLIC_API_ENABLED,"true");
-  assert.equal(vars(inventory.moses.api).PUBLIC_API_ENABLED,"false");
+  assert.equal(vars(inventory.moses.api).PUBLIC_API_ENABLED,"true");
 });
 
 test("Focus and Moses resource/security identities never cross",()=>{

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requirePermission,type StaffIdentity } from "./auth";
-import { sendOpsNotification } from "./ops-notify";
+import { NATIVE_WEB_PROVIDER } from "./conversation-providers";
 import { hashResumeToken,markCustomerConversationResumed,randomResumeToken,resolveConversationResumeToken } from "./resume-tokens";
 
 const startSchema=z.object({
@@ -30,7 +30,7 @@ export async function nativeChatStatus(db:D1Database,now:string){
   return {state:live?"live":"async",label:live?"Live Chat":"Send us a Message",destinationUrl:null,checkedAt:now};
 }
 
-export async function startNativeConversation(request:Request,env:Env,ctx:ExecutionContext){
+export async function startNativeConversation(request:Request,env:Env){
   const parsed=startSchema.safeParse(await request.json().catch(()=>null));
   if(!parsed.success)throw new NativeChatError(422,"validation_error","Please check the highlighted chat details");
   if(parsed.data.website)throw new NativeChatError(400,"invalid_submission","The message could not be sent");
@@ -38,9 +38,8 @@ export async function startNativeConversation(request:Request,env:Env,ctx:Execut
   const now=new Date().toISOString();const proposedContactId=crypto.randomUUID();const conversationId=crypto.randomUUID();const resumeToken=randomResumeToken();const tokenHash=await hashResumeToken(resumeToken);const email=parsed.data.email.toLowerCase();
   await env.DB.prepare(`INSERT OR IGNORE INTO contacts (id,full_name,email,phone,preferred_contact,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`).bind(proposedContactId,parsed.data.name,email,parsed.data.phone||null,"email",now,now).run();
   const contact=await env.DB.prepare("SELECT id FROM contacts WHERE lower(email)=?").bind(email).first<{id:string}>();if(!contact)throw new NativeChatError(500,"conversation_not_saved","The conversation could not be created");
-  await env.DB.prepare(`INSERT INTO conversations (id,contact_id,provider,channel_state,public_resume_token_hash,reply_email,reply_sms,reply_call,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(conversationId,contact.id,"native_web","open",tokenHash,parsed.data.replyEmail?1:0,parsed.data.replySms?1:0,parsed.data.replyCall?1:0,now,now).run();
+  await env.DB.prepare(`INSERT INTO conversations (id,contact_id,provider,channel_state,public_resume_token_hash,reply_email,reply_sms,reply_call,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(conversationId,contact.id,NATIVE_WEB_PROVIDER,"open",tokenHash,parsed.data.replyEmail?1:0,parsed.data.replySms?1:0,parsed.data.replyCall?1:0,now,now).run();
   const result=await persistThroughRoom(env,conversationId,{senderKind:"customer",senderResponderId:null,body:parsed.data.message,clientMessageId:parsed.data.clientMessageId});
-  ctx.waitUntil(sendOpsNotification(env,{name:parsed.data.name,email,phone:parsed.data.phone||null,message:parsed.data.message,replyEmail:parsed.data.replyEmail,replySms:parsed.data.replySms,replyCall:parsed.data.replyCall}).catch((error)=>console.warn(JSON.stringify({message:"ops notification failed",conversationId,error:error instanceof Error?error.message:"Unknown error"}))));
   return Response.json({ok:true,conversation:{id:conversationId,resumeToken,mode:(await nativeChatStatus(env.DB,now)).state},...result},{status:201,headers:{"Cache-Control":"no-store"}});
 }
 
@@ -111,6 +110,6 @@ async function history(db:D1Database,id:string){const result=await db.prepare("S
 async function markRead(db:D1Database,id:string,responderId:string){const latest=await db.prepare("SELECT COALESCE(MAX(sequence),0) AS sequence FROM conversation_messages WHERE conversation_id=?").bind(id).first<{sequence:number}>();await db.prepare(`INSERT INTO conversation_reads VALUES (?,?,?,?) ON CONFLICT(conversation_id,responder_id) DO UPDATE SET last_read_sequence=excluded.last_read_sequence,updated_at=excluded.updated_at`).bind(id,responderId,Number(latest?.sequence??0),new Date().toISOString()).run();}
 async function authorizeCustomer(db:D1Database,id:string,token:string|null){if(!token)throw new NativeChatError(401,"conversation_access_required","Conversation access is required");const authorization=await resolveConversationResumeToken(db,token);if(!authorization||authorization.conversationId!==id)throw new NativeChatError(403,"conversation_access_denied","Conversation access was denied");return authorization;}
 async function requireConversation(db:D1Database,id:string){if(!await db.prepare("SELECT id FROM conversations WHERE id=?").bind(id).first())throw new NativeChatError(404,"conversation_not_found","Conversation not found");}
-async function persistThroughRoom(env:Env,id:string,payload:object){const response=await room(env,id).fetch(`https://chat-room/message?conversationId=${encodeURIComponent(id)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new NativeChatError(response.status,"message_not_saved","The message could not be saved");return response.json<{message:unknown;continuity?:{status:string}}>();}
+export async function persistThroughRoom(env:Env,id:string,payload:object){const response=await room(env,id).fetch(`https://chat-room/message?conversationId=${encodeURIComponent(id)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new NativeChatError(response.status,"message_not_saved","The message could not be saved");return response.json<{message:unknown;continuity?:{status:string}}>();}
 function room(env:Env,id:string){if(!env.CHAT_ROOMS)throw new NativeChatError(503,"chat_unavailable","Chat is temporarily unavailable");return env.CHAT_ROOMS.getByName(id);}
 async function enforceChatRateLimit(request:Request,env:Env,scope:string){if(!env.CHAT_RATE_LIMITER){if(env.ENVIRONMENT!=="development")throw new NativeChatError(503,"chat_unavailable","Chat is temporarily unavailable");return;}const ip=request.headers.get("CF-Connecting-IP")??"unknown";if(!(await env.CHAT_RATE_LIMITER.limit({key:`${scope}:${ip}`})).success)throw new NativeChatError(429,"rate_limited","Please wait before sending another message");}

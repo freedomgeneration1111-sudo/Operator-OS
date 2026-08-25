@@ -1,12 +1,13 @@
 {
   "$schema":"../../node_modules/wrangler/config-schema.json",
   "name":"moses-operator-console-staging","main":"../../src/console.ts","compatibility_date":"2026-08-10","compatibility_flags":["nodejs_compat"],"workers_dev":true,
+  "routes":[{"pattern":"staff.mosesjorgensen.com","custom_domain":true}],
   "assets":{"directory":"../../staff-app/dist","binding":"ASSETS","not_found_handling":"single-page-application","run_worker_first":true},
   "d1_databases":[{"binding":"DB","database_name":"moses-operator-crm-staging","database_id":"578a2794-ba0c-43af-9779-6f1594b60a87","migrations_dir":"../../migrations"}],
   "vars":{
     "BUSINESS_PROFILE":"moses","DEPLOYMENT_KEY":"moses-operator-console-staging","PUBLIC_API_ENABLED":"false","PUBLIC_SITE_ORIGIN":"",
     "CONCURRENT_EVENT_CAPACITY":"1","PRESENCE_TIMEOUT_SECONDS":"120","ENVIRONMENT":"staging","STAFF_AUTH_MODE":"access",
-    "STAFF_HOSTNAME":"moses-operator-console-staging.freedomgeneration1111.workers.dev","ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com",
+    "STAFF_HOSTNAME":"staff.mosesjorgensen.com,moses-operator-console-staging.freedomgeneration1111.workers.dev","ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com",
     "ACCESS_AUD":"155a76ec90ab8c6acf9f86583b8975d8a379696e84b9ddb41a0b5a9157ba354b","NATIVE_CHAT_BACKEND":"service",
     "VAPID_PUBLIC_KEY":"BDYXAu_DiP8HPXxOxvM4JaqxiYtB9Zj9TYQ9Lm4PP-FxmMKGoGXSZ2T2Y87lIWaLIOKvVURnGMDaxdbuAHO6kW8","VAPID_KEYSET_ID":"moses-staging-2026-08-17"
   },

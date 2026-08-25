@@ -4,14 +4,14 @@ Operating rules for Claude Code in this repo. Read this fully before making chan
 
 ## 1. What this is
 
-The canonical, business-neutral CRM/chat/scheduling Worker backend, extracted so multiple client businesses can run on the same codebase with **deployment-time, not runtime, isolation** — no tenant ID, no shared database, no shared Worker. Each business gets its own D1 database, its own Durable Object namespaces, its own Workers, deployed from its own config file. `business-profiles.mts` is the single source of truth for what a given deployment is allowed to do (`capabilities: {event, schedule, capacity, availability}`), keyed by `BUSINESS_PROFILE`.
+The canonical, business-neutral CRM/chat/scheduling Worker backend, extracted so multiple client businesses can run on the same codebase with **deployment-time, not runtime, isolation** — no tenant ID, no shared database, no shared Worker. Each business gets its own D1 database, its own Durable Object namespaces, its own Workers, deployed from its own config file. `business-profiles.mts` is the single source of truth for what a given deployment is allowed to do (`capabilities: {event, schedule, capacity, availability, whatsappChannel, opsNotifyEmail, opsNotifyPush}`), keyed by `BUSINESS_PROFILE`.
 
 Two business profiles exist today:
 
 | Key | Business | Status |
 |---|---|---|
 | `focus` | Focus Lab Productions | **Live.** Real customer traffic via the paired `Sunny-ops` repo. |
-| `moses` | Moses Jorgensen (consulting) | Scaffolded, all capabilities off, `PUBLIC_API_ENABLED:"false"`. Never deployed. Don't assume it works — verify before touching. |
+| `moses` | Moses Jorgensen (consulting) | `PUBLIC_API_ENABLED:"false"`, `publicChat:false` — no native chat/message-form traffic. Staff console **is live** at `staff.mosesjorgensen.com` (attached 2026-08-24). The API Worker (`moses-operator-api-staging`) has real deployments on record (`wrangler deployments list` — earliest 2026-08-17) contradicting any note that says "never deployed," but it's currently **un-deployable**: `deployments/moses-jorgensen/api.staging.jsonc` requires `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`/`WHATSAPP_WEBHOOK_VERIFY_TOKEN`/`WHATSAPP_APP_SECRET` and none are provisioned (`wrangler secret list` confirms), so `wrangler deploy` hard-fails before upload. Whatever code shipped there on 2026-08-17 is what's still live — verify against current `src/` before assuming parity. |
 
 Stack: TypeScript, Cloudflare Workers, D1, Durable Objects (`ChatRoom`, `StaffChatHub`), Zod-validated contracts, `jose` for Access JWT verification, Vitest (`@cloudflare/vitest-pool-workers`), a separate React/Vite staff PWA (`staff-app/`).
 
@@ -22,10 +22,10 @@ Every deployment target is its own config file under `deployments/<business>/`. 
 | Config | Worker | Purpose | Status |
 |---|---|---|---|
 | `deployments/focus-lab/api.staging.jsonc` | `focus-lab-api-staging` | Core API — chat, CRM, scheduling, availability. Service-bound from `Sunny-ops`' public site (`OPERATIONS_API`) and from the staff console (`CHAT_API`). | **Live.** "Staging" is a legacy name — this takes real customer traffic. |
-| `deployments/focus-lab/console.staging.jsonc` | via `staff:build:focus:staging` + deploy | Staff PWA. | **Live**, bound to custom domain `staff.focuslabproductions.com` (attached 2026-08-21) *and* the `workers.dev` route, kept in parallel during the transition. |
-| Root `wrangler.jsonc` (no `--config`, or `--env staging`) | `focus-lab-operations` / `focus-lab-operations-staging` | Local dev config; `env.staging` overlaps meaningfully with `deployments/focus-lab/console.staging.jsonc` — check both before assuming which one actually shipped. | Mixed — verify per-task. |
-| `deployments/moses-jorgensen/api.staging.jsonc` | `moses-operator-api-staging` | Moses profile's API. | Config exists, **never deployed.** `PUBLIC_API_ENABLED:"false"`. |
-| `deployments/moses-jorgensen/console.staging.jsonc` | via `staff:build:moses:staging` + deploy | Moses profile's staff console. | Same — scaffolded, not live. |
+| `deployments/focus-lab/console.staging.jsonc` | via `staff:build:focus:staging` + deploy | Staff PWA. | **Live**, bound to custom domain `staff.focuslabproductions.com` *and* the `workers.dev` route, kept in parallel during the transition. As of 2026-08-24 this file is the sole authoritative home for that route (see ADR-0004) — it previously lived only in root `wrangler.jsonc`'s `env.staging`, which was a live/deploy-config split; that route was removed from root `wrangler.jsonc` in the same pass. |
+| Root `wrangler.jsonc` (no `--config`, or `--env staging`) | `focus-lab-operations` / `focus-lab-operations-staging` | Local dev config. Its `env.staging` block still exists and targets the same Worker name as `deployments/focus-lab/console.staging.jsonc`, but no longer carries the custom-domain route — don't re-add it there. | Legacy/local-dev; not the deploy path the npm scripts use. |
+| `deployments/moses-jorgensen/api.staging.jsonc` | `moses-operator-api-staging` | Moses profile's API. | Has real deployments on record but is **currently un-deployable** — required WhatsApp secrets are missing. See the profile table above. |
+| `deployments/moses-jorgensen/console.staging.jsonc` | via `staff:build:moses:staging` + deploy | Moses profile's staff console. | **Live**, bound to custom domain `staff.mosesjorgensen.com` (attached 2026-08-24, see ADR-0004) *and* the `workers.dev` route. |
 
 ```bash
 npm run focus:staging:deploy:api        # core API
