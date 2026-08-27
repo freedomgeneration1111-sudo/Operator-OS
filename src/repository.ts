@@ -43,7 +43,7 @@ export async function getInquiryDetail(db: D1Database, inquiryId: string) {
     db.prepare(`SELECT organization,offer_service_area,situation_problem,desired_outcome,timeline,budget,country_region,referral_source,created_at,updated_at
       FROM consulting_details WHERE inquiry_id=?`).bind(inquiryId),
     db.prepare(`SELECT id,form_schema_key,schema_version,origin,source_channel,referral,landing_page,referrer,
-      utm_source,utm_medium,utm_campaign,utm_term,utm_content,captured_at,received_at
+      utm_source,utm_medium,utm_campaign,utm_term,utm_content,captured_at,received_at,availability_checked
       FROM intake_submissions WHERE inquiry_id=? ORDER BY received_at DESC`).bind(inquiryId),
     db.prepare(`SELECT a.responder_id,r.display_label,a.assigned_at FROM assignments a JOIN responders r ON r.id=a.responder_id WHERE a.inquiry_id=?`).bind(inquiryId),
     db.prepare("SELECT n.id,n.author_responder_id,r.display_label AS author_label,n.body,n.created_at FROM internal_notes n LEFT JOIN responders r ON r.id=n.author_responder_id WHERE n.inquiry_id=? ORDER BY n.created_at DESC").bind(inquiryId),

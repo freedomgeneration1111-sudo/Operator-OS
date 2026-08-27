@@ -29,7 +29,7 @@ export type ConsultingDetail={
 };
 export type InquiryDetail={
   ok:true;inquiry:InquiryRecord;event:Record<string,unknown>|null;consulting:ConsultingDetail|null;
-  intakeSubmissions:Array<{id:string;form_schema_key:string;schema_version:number;origin:string;source_channel:string;received_at:string}>;
+  intakeSubmissions:Array<{id:string;form_schema_key:string;schema_version:number;origin:string;source_channel:string;received_at:string;availability_checked:number|null}>;
   services:Array<{ service_name:string }>;
   assignments:Array<{ responder_id:string;display_label:string;assigned_at:string }>;
   notes:Array<{ id:string;author_responder_id:string|null;author_label:string|null;body:string;created_at:string }>;

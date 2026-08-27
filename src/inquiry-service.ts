@@ -28,7 +28,7 @@ const consultingExtensionSchema=z.object({
 const commandSchema=z.object({
   contact:contactSchema,
   inquiry:z.object({sourceChannel:z.string().trim().min(1).max(100),budgetContext:optionalText(300),customerNote:optionalText(4000)}),
-  intake:z.object({formSchemaKey:z.string().trim().min(1).max(150),schemaVersion:z.number().int().positive(),origin:z.string().trim().min(1).max(300),payload:z.record(z.string(),z.unknown())}),
+  intake:z.object({formSchemaKey:z.string().trim().min(1).max(150),schemaVersion:z.number().int().positive(),origin:z.string().trim().min(1).max(300),payload:z.record(z.string(),z.unknown()),availabilityChecked:z.boolean().nullish()}),
   attribution:attributionSchema,
   extension:z.discriminatedUnion("kind",[eventExtensionSchema,consultingExtensionSchema]),
   acknowledgementMessage:z.string().trim().min(1).max(500),
@@ -41,6 +41,7 @@ const id=(prefix:string)=>`${prefix}_${crypto.randomUUID().replaceAll("-","")}`;
 export async function createInquiry(db:D1Database,unparsed:CreateInquiryCommand,idempotencyKey:string,now:string):Promise<InquiryCreatedResponse>{
   const command=commandSchema.parse(unparsed);
   const payloadJson=JSON.stringify(command.intake.payload);
+  const availabilityChecked=command.intake.availabilityChecked==null?null:command.intake.availabilityChecked?1:0;
   if(new TextEncoder().encode(payloadJson).byteLength>16_384)throw new Error("Approved intake payload exceeds 16384 bytes");
   const replay=await findReplay(db,idempotencyKey);
   if(replay)return responseFor(replay,true,command.acknowledgementMessage);
@@ -85,12 +86,12 @@ export async function createInquiry(db:D1Database,unparsed:CreateInquiryCommand,
   }
   statements.push(
     db.prepare(`INSERT INTO intake_submissions
-      (id,inquiry_id,form_schema_key,schema_version,origin,source_channel,referral,landing_page,referrer,utm_source,utm_medium,utm_campaign,utm_term,utm_content,captured_at,received_at,payload_json)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+      (id,inquiry_id,form_schema_key,schema_version,origin,source_channel,referral,landing_page,referrer,utm_source,utm_medium,utm_campaign,utm_term,utm_content,captured_at,received_at,payload_json,availability_checked)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
       id("int"),inquiryId,command.intake.formSchemaKey,command.intake.schemaVersion,command.intake.origin,
       command.inquiry.sourceChannel,command.attribution.referral,command.attribution.landingPage,command.attribution.referrer,
       command.attribution.utmSource,command.attribution.utmMedium,command.attribution.utmCampaign,
-      command.attribution.utmTerm,command.attribution.utmContent,command.attribution.capturedAt,now,payloadJson,
+      command.attribution.utmTerm,command.attribution.utmContent,command.attribution.capturedAt,now,payloadJson,availabilityChecked,
     ),
     db.prepare(`INSERT INTO activities
       (id,inquiry_id,event_id,actor_kind,activity_type,metadata_json,created_at) VALUES (?,?,?,'customer','inquiry_created',?,?)`)

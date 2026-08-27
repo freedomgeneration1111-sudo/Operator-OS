@@ -36,6 +36,16 @@ describe("POST /v1/inquiries",() => {
     expect(await env.DB.prepare("SELECT blocks_capacity FROM events WHERE id=(SELECT event_id FROM inquiries WHERE id=?)").bind(body.inquiryId).first<number>("blocks_capacity")).toBe(0);
     expect(await env.DB.prepare("SELECT COUNT(*) count FROM intake_submissions WHERE inquiry_id=?").bind(body.inquiryId).first<number>("count")).toBe(1);
   });
+  it("promotes availabilityChecked onto intake_submissions.availability_checked, defaulting to NULL",async () => {
+    const checked = await SELF.fetch(inquiryRequest({ ...validInquiry,availabilityChecked: true },"availability-checked-01"));
+    expect(checked.status).toBe(201);
+    const checkedId = (await checked.json<{ inquiryId: string }>()).inquiryId;
+    expect(await env.DB.prepare("SELECT availability_checked FROM intake_submissions WHERE inquiry_id=?").bind(checkedId).first<number>("availability_checked")).toBe(1);
+
+    const unchecked = await SELF.fetch(inquiryRequest(validInquiry,"availability-checked-02"));
+    const uncheckedId = (await unchecked.json<{ inquiryId: string }>()).inquiryId;
+    expect(await env.DB.prepare("SELECT availability_checked FROM intake_submissions WHERE inquiry_id=?").bind(uncheckedId).first<number | null>("availability_checked")).toBeNull();
+  });
   it("rejects missing required fields with CORS",async () => {const response=await SELF.fetch(inquiryRequest({ name: "Only name" }));expect(response.status).toBe(422);expectPublicCors(response);});
   it("rejects malformed fields",async () => expect((await SELF.fetch(inquiryRequest({ ...validInquiry,email: "not-email" }))).status).toBe(422));
   it("rejects a missing Turnstile token",async () => { const body={...validInquiry,turnstileToken:undefined};expect((await SELF.fetch(inquiryRequest(body,"missing-turnstile-01"))).status).toBe(422); });
@@ -100,7 +110,7 @@ describe("chat status and responder presence",() => {
 
 describe("protected CRM API and database integrity",() => {
   it("applies migrations and enforces foreign keys",async () => {
-    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(7);
+    expect(await env.DB.prepare("SELECT COUNT(*) count FROM d1_migrations").first<number>("count")).toBe(8);
     await expect(env.DB.prepare("INSERT INTO inquiry_services VALUES (?,?)").bind("missing","Photo").run()).rejects.toThrow();
   });
   it("does not expose CRM enumeration publicly",async () => {

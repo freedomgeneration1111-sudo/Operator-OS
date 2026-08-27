@@ -18,7 +18,7 @@ export function focusCommand(input:InquiryRequest,now:string):CreateInquiryComma
   return{
     contact:{fullName:input.name,email:input.email,phone:input.phone,preferredContact:input.contact},
     inquiry:{sourceChannel:input.source??"website",budgetContext:input.budget,customerNote:input.note},
-    intake:{formSchemaKey:"focus.website.event-inquiry",schemaVersion:1,origin:"focus_public_website",payload:{...input}},
+    intake:{formSchemaKey:"focus.website.event-inquiry",schemaVersion:1,origin:"focus_public_website",payload:{...input},availabilityChecked:input.availabilityChecked},
     attribution:{referral:input.referral,landingPage:input.landingPage,referrer:input.referrer,utmSource:input.utmSource,utmMedium:input.utmMedium,utmCampaign:input.utmCampaign,utmTerm:input.utmTerm,utmContent:input.utmContent,capturedAt:now},
     extension:{kind:"event",eventFamily:input.eventType,startDate:input.date,endDate:input.endDate??input.date,startTime:input.startTime,endTime:input.endTime,venueLocation:input.location,guestCount:input.guests??null,services:input.services},
     acknowledgementMessage:FOCUS_ACKNOWLEDGEMENT,
