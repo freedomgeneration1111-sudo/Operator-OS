@@ -48,6 +48,27 @@ describe("handleAvailability",() => {
     expect(await response.json()).toEqual({ ok: true,date: "2026-09-15",status: "available" });
   });
 
+  it("resolves unavailable for a date that is clear in KV but has a capacity-blocking event in D1",async () => {
+    const iso = "2026-09-01T00:00:00.000Z";
+    await env.DB.prepare(`INSERT INTO events (id,event_family,start_date,end_date,blocks_capacity,scheduling_state,created_at,updated_at)
+      VALUES (?, 'Wedding', '2026-09-15', '2026-09-15', 1, 'confirmed', ?, ?)`).bind("evt_avail_block",iso,iso).run();
+    const request = new Request("https://operations.example.test/v1/availability?date=2026-09-15",{ headers: { "CF-Connecting-IP": "192.0.2.30" } });
+    const body = await (await handleAvailability(request,env,now)).json() as { status: string };
+    expect(body.status).toBe("unavailable"); // "2026-09-15" is not in cache.busyDates — the block is D1-only
+  });
+
+  it("never suggests an internally-blocked date as a nearby alternative",async () => {
+    const iso = "2026-09-01T00:00:00.000Z";
+    await env.DB.prepare(`INSERT INTO events (id,event_family,start_date,end_date,blocks_capacity,scheduling_state,created_at,updated_at)
+      VALUES (?, 'Wedding', '2026-09-11', '2026-09-11', 1, 'confirmed', ?, ?)`).bind("evt_avail_nearby",iso,iso).run();
+    const request = new Request("https://operations.example.test/v1/availability?date=2026-09-10",{ headers: { "CF-Connecting-IP": "192.0.2.31" } });
+    const body = await (await handleAvailability(request,env,now)).json() as { status: string; nearby: { date: string }[] };
+    expect(body.status).toBe("unavailable"); // 2026-09-10 is busy in KV
+    const nearbyDates = body.nearby.map((entry) => entry.date);
+    expect(nearbyDates).not.toContain("2026-09-11"); // internally blocked — must be skipped
+    expect(nearbyDates).toEqual(["2026-09-09","2026-09-12","2026-09-08"]);
+  });
+
   it("falls back to unknown when the cache is older than the staleness threshold",async () => {
     const request = new Request("https://operations.example.test/v1/availability?date=2026-09-15",{ headers: { "CF-Connecting-IP": "192.0.2.13" } });
     const wayLater = new Date("2026-09-06T12:00:00.000Z"); // >30 minutes after generatedAt

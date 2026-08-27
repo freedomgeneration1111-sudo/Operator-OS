@@ -1,11 +1,14 @@
 import { z } from "zod";
-import { addDaysIso, isoDateInTimeZone } from "./availability-timezone";
+import { addDaysIso, isoDateInTimeZone, isoDatesBetween } from "./availability-timezone";
 import { AVAILABILITY_CACHE_KEY, readAvailabilityCache, type AvailabilityCache } from "./availability-cache";
+import { listBlockingWindows } from "./repository";
+import type { SchedulingWindow } from "./scheduling";
 
 export type AvailabilityStatus = "available" | "unavailable" | "unknown";
 export type AvailabilityResponse = { ok: true; date: string; status: AvailabilityStatus; nearby?: { date: string; status: AvailabilityStatus }[] };
 
 export type AvailabilityApiEnv = {
+  DB?: D1Database;
   AVAILABILITY_CACHE?: KVNamespace;
   AVAILABILITY_RATE_LIMITER?: RateLimit;
   AVAILABILITY_CACHE_STALE_MINUTES?: string;
@@ -32,10 +35,30 @@ function isFresh(cache: AvailabilityCache, now: Date, staleMinutes: number): boo
   return Number.isFinite(ageMs) && ageMs <= staleMinutes * 60_000;
 }
 
-/** Pure: resolves a single date's status plus, when booked, nearby available alternatives — no extra cache reads. */
-export function resolveAvailability(cache: AvailabilityCache | null, date: string, todayIso: string): AvailabilityResponse {
+/** Pure: expands capacity-blocking scheduling windows (fetched from D1 by the caller) to the individual ISO dates they cover. */
+export function blockedDatesFromWindows(windows: SchedulingWindow[]): Set<string> {
+  const dates = new Set<string>();
+  for (const window of windows) {
+    if (!window.startDate) continue;
+    for (const date of isoDatesBetween(window.startDate, window.endDate ?? window.startDate)) dates.add(date);
+  }
+  return dates;
+}
+
+/**
+ * Pure: resolves a single date's status plus, when booked, nearby available alternatives — no I/O.
+ * `blockedDates` is the caller-supplied set of internally capacity-blocking dates (read from D1 in the
+ * handler); it is unioned into the KV busy-date set before both the status decision and the nearby scan.
+ */
+export function resolveAvailability(
+  cache: AvailabilityCache | null,
+  date: string,
+  todayIso: string,
+  blockedDates: ReadonlySet<string> = new Set(),
+): AvailabilityResponse {
   if (!cache || date < cache.windowStart || date > cache.windowEnd) return { ok: true, date, status: "unknown" };
   const busy = new Set(cache.busyDates);
+  for (const blocked of blockedDates) busy.add(blocked);
   const status: AvailabilityStatus = busy.has(date) ? "unavailable" : "available";
   if (status !== "unavailable") return { ok: true, date, status };
 
@@ -62,7 +85,12 @@ async function enforceRateLimit(request: Request, env: AvailabilityApiEnv): Prom
   if (!result.success) throw new AvailabilityApiError(429, "rate_limited", "Too many attempts. Please wait a minute and try again");
 }
 
-/** GET /v1/availability?date=YYYY-MM-DD. Cache-read only — never calls Google on the request path. */
+/**
+ * GET /v1/availability?date=YYYY-MM-DD. Reads the KV busy-date cache and, when that cache is fresh and
+ * the requested date is in-window, the D1 `events` table for capacity-blocking days (via
+ * `listBlockingWindows`) — the only backend touch on the request path. Never calls Google on the
+ * request path; returns no event data, only date/status.
+ */
 export async function handleAvailability(request: Request, env: AvailabilityApiEnv, now: Date = new Date()): Promise<Response> {
   await enforceRateLimit(request, env);
   const parsed = dateSchema.safeParse(new URL(request.url).searchParams.get("date"));
@@ -72,7 +100,12 @@ export async function handleAvailability(request: Request, env: AvailabilityApiE
   const staleMinutes = positiveInteger(env.AVAILABILITY_CACHE_STALE_MINUTES, 30);
   const fresh = cache && isFresh(cache, now, staleMinutes) ? cache : null;
   const todayIso = isoDateInTimeZone(now, fresh?.timeZone ?? "UTC");
-  const body = resolveAvailability(fresh, parsed.data, todayIso);
+  // Only touch D1 when the KV cache is fresh and the requested date is in-window — otherwise
+  // resolveAvailability short-circuits to "unknown" and the blocked-date set is irrelevant.
+  const blockedDates = fresh && env.DB && parsed.data >= fresh.windowStart && parsed.data <= fresh.windowEnd
+    ? blockedDatesFromWindows(await listBlockingWindows(env.DB, fresh.windowStart, fresh.windowEnd))
+    : new Set<string>();
+  const body = resolveAvailability(fresh, parsed.data, todayIso, blockedDates);
   return Response.json(body, { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=60" } });
 }
 
