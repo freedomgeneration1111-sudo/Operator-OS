@@ -246,3 +246,109 @@ automatically.
 | **3** | **Done** — `8152c5e` |
 | 2 | Open — `handleAvailability` D1 read + `API.md`/`openapi.yaml` update + `test/availability-api.test.ts` cases |
 | 5 | Open — `dispatchEventInquiryNotificationEmail` in `src/ops-notify.ts`, fired from the `kind === "event"` branch of `publicInquiry` (unblocked; mirrors the consulting notification in `69ad652`) |
+
+---
+
+# Addendum — Decision 5 implemented (2026-08-27)
+
+Third pass. **ADR-0006 Decision 5 is now implemented and pushed.** Only Decision 2 remains open.
+
+## Precondition check
+
+`dispatchConsultingInquiryNotificationEmail` confirmed present in `src/ops-notify.ts` at `HEAD`
+(`ddd3e34`, `git show HEAD:src/ops-notify.ts`) before starting — the required base for a
+near-verbatim copy.
+
+## Commit
+
+| Commit | Subject | On `origin/main` |
+|---|---|---|
+| `2210bb6189979e4530eea7c2520d88d1fbf0db86` | `feat: notify staff on new event inquiries (ADR-0006 Decision 5)` | yes — pushed `ddd3e34..2210bb6` |
+
+3 files changed, 99 insertions(+), 2 deletions(-).
+
+## The function — mirrors the consulting pattern
+
+`dispatchEventInquiryNotificationEmail(env, {inquiryId}, fetcher = fetch)` in `src/ops-notify.ts`,
+placed directly after `dispatchConsultingInquiryNotificationEmail`. Point-by-point parity:
+
+| Aspect | `dispatchConsultingInquiryNotificationEmail` | `dispatchEventInquiryNotificationEmail` |
+|---|---|---|
+| Capability guard | `if (!profile.capabilities.opsNotifyEmail) return;` | identical |
+| Secret guard | `if (!RESEND_API_KEY \|\| !CUSTOMER_EMAIL_FROM \|\| !OPS_NOTIFY_EMAIL) { console.warn(…); return; }` (never throws) | identical (warn message keyed `"event inquiry notification skipped: not configured"`) |
+| Query | `FROM inquiries i JOIN contacts c JOIN consulting_details cd LEFT JOIN intake_submissions s ON s.inquiry_id=i.id WHERE i.id=? ORDER BY s.received_at DESC LIMIT 1` | same shape, `JOIN events e ON e.id=i.event_id` in place of `consulting_details`; pulls `full_name, email, phone, event_family, start_date, end_date, venue_location` + `source_channel` + `landing_page/utm_*` from `s` |
+| `if (!row) return;` | yes | yes |
+| Deep link | `${STAFF_CONSOLE_ORIGIN.replace(/\/$/,"")}/#/inquiry/${encodeURIComponent(inquiryId)}` (null when origin unset) | identical |
+| Attribution block | `Source / Landing page / UTM source / UTM medium / UTM campaign`, `.filter(Boolean).join("\n")` | identical |
+| Resend call | `POST https://api.resend.com/emails`, `Bearer ${RESEND_API_KEY}`, `{ from: CUSTOMER_EMAIL_FROM, to: [OPS_NOTIFY_EMAIL], subject, text }` | identical |
+| Failure | `if (!response.ok) throw new Error("Resend rejected the … notification (${status})")` | identical (message: `"… event inquiry notification …"`) |
+
+Body text: `New event inquiry from {name}` + `Event type` / `Dates` (single date, or `{start} to {end}`
+for a range) / `Venue/location` / `Email` / `Phone` / attribution / deep link.
+
+## Wiring — identical to the consulting branch
+
+`src/index.ts`, `publicInquiry`, `kind === "event"` branch:
+
+```ts
+const result = await createFocusInquiry(env.DB, parsed.data, key, now);
+if (!result.idempotentReplay) {
+  ctx.waitUntil(dispatchEventInquiryNotificationEmail(env, { inquiryId: result.inquiryId }).catch((error: unknown) => {
+    console.error(JSON.stringify({ message: "event inquiry notification failed", inquiryId: result.inquiryId, error: error instanceof Error ? error.message : "Unknown error" }));
+  }));
+}
+return json(result, result.idempotentReplay ? 200 : 201);
+```
+
+Fires once per non-replay event inquiry, off the response path, failure logged not surfaced — the
+same `ctx.waitUntil(...).catch(console.error)` shape the consulting branch uses. Import updated:
+`import { dispatchConsultingInquiryNotificationEmail, dispatchEventInquiryNotificationEmail } from "./ops-notify";`
+
+## Tests
+
+`test/ops-notify.test.ts` — new `describe("event inquiry notification email")`:
+
+1. **config-absent** — `dispatchEventInquiryNotificationEmail(env, …)` with no Resend config
+   resolves `undefined` and never calls `fetch` (mirrors the equivalent `dispatchOpsNotificationEmail`
+   case).
+2. **full send** — seeds `contacts` + `events` (Wedding, `2027-06-10`..`2027-06-12`, Dallas TX) +
+   `inquiries` + `intake_submissions` (with `utm_campaign`), then asserts the Resend body: `from`/`to`,
+   subject `New event inquiry from Event Lead`, `Event type: Wedding`, `Dates: 2027-06-10 to
+   2027-06-12`, `Venue/location: Dallas, TX`, phone `555-0142`, `UTM campaign: summer-weddings`,
+   deep link `https://staff.example.test/#/inquiry/inq_event_notice`.
+
+## Test suite — full run, zero failures
+
+| Suite | Result |
+|---|---|
+| `npm run test:operations` | **153 passed** / 19 files (was 151; +2 new tests) |
+| `npm run test:config-isolation` | **3 / 3 passed** |
+| `npm run staff:test` | **32 / 32 passed** |
+| `npm run test:staff:e2e` | **21 passed, 2 skipped, 0 failed** |
+| `npm run typecheck` / `staff:typecheck` | clean |
+| `npm run lint` / `staff:lint` | clean |
+
+**No companion-fixture exception used.** The notification writes nothing to D1, and in the test
+environment (no `RESEND_API_KEY` / `CUSTOMER_EMAIL_FROM` / `OPS_NOTIFY_EMAIL` in
+`vitest.config.mts`) it hits the secret guard and returns before any `fetch` — exactly as the
+consulting notification, wired the same way since `69ad652`, already does. No existing count/list
+assertion is affected.
+
+## Definition of done
+
+- [x] Function added, mirrors the consulting pattern (guard-for-guard, join shape, deep link — table
+      above).
+- [x] Wired into the `kind === "event"` branch on `!result.idempotentReplay`, `ctx.waitUntil(...).catch(log)`.
+- [x] Full test suite passes with zero failures (no companion-fixture exception needed).
+- [x] Committed — `2210bb6`.
+- [x] Pushed to `origin/main` — `ddd3e34..2210bb6`.
+- [x] This addendum appended with the commit hash.
+
+## Updated ADR-0006 status
+
+| Decision | Status |
+|---|---|
+| 1, 4, 6 | No code required |
+| **3** | **Done** — `8152c5e` |
+| **5** | **Done** — `2210bb6` |
+| 2 | Open — `handleAvailability` D1 read + `API.md`/`openapi.yaml` update + `test/availability-api.test.ts` cases |
