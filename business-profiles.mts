@@ -21,6 +21,7 @@ export type BusinessProfile={
   logoUrl:string|null;
   capabilities:BusinessCapabilities;
   publicEventInquiry:boolean;
+  publicConsultingInquiry:boolean;
   messagingPrompt:string;
   publicChat:boolean;
   pushTopicPrefix:string;
@@ -32,14 +33,14 @@ const profiles:Record<BusinessProfile["key"],BuildProfile>={
   focus:{
     key:"focus",businessName:"Focus Lab Productions",shortName:"Focus Lab",appName:"Focus Lab Operations",
     appDescription:"Internal CRM and responder workspace for Focus Lab Productions.",logoUrl:"/app-mark.svg",
-    logoSource:"business/focus-lab/focus-lab-mark.svg",publicEventInquiry:true,publicChat:true,
+    logoSource:"business/focus-lab/focus-lab-mark.svg",publicEventInquiry:true,publicConsultingInquiry:false,publicChat:true,
     messagingPrompt:"Hi Focus Lab, I would like to discuss an event.",pushTopicPrefix:"fl",
     capabilities:{event:true,schedule:true,capacity:true,availability:true,whatsappChannel:false,opsNotifyEmail:true,opsNotifyPush:true},
     vocabulary:{inquirySingular:"inquiry",inquiryPlural:"inquiries",customerSingular:"customer"},
   },
   moses:{
     key:"moses",businessName:"Moses Jorgensen",shortName:"Moses",appName:"Moses Operations",
-    appDescription:"Internal CRM and responder workspace for Moses Jorgensen.",logoUrl:null,logoSource:null,publicEventInquiry:false,publicChat:true,
+    appDescription:"Internal CRM and responder workspace for Moses Jorgensen.",logoUrl:null,logoSource:null,publicEventInquiry:false,publicConsultingInquiry:true,publicChat:true,
     messagingPrompt:"Hi Moses, I would like to discuss consulting.",pushTopicPrefix:"mj",
     capabilities:{event:false,schedule:false,capacity:false,availability:false,whatsappChannel:true,opsNotifyEmail:true,opsNotifyPush:true},
     vocabulary:{inquirySingular:"inquiry",inquiryPlural:"inquiries",customerSingular:"client"},

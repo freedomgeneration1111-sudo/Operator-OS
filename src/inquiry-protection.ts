@@ -73,10 +73,14 @@ export async function enforceInquiryProtection(
   if (!result?.success) {
     throw new InquiryProtectionError(400, "verification_failed", "Please complete the verification and try again");
   }
-  if (env.TURNSTILE_EXPECTED_HOSTNAME && result.hostname !== env.TURNSTILE_EXPECTED_HOSTNAME) {
+  const expectedHostnames = (env.TURNSTILE_EXPECTED_HOSTNAMES ?? env.TURNSTILE_EXPECTED_HOSTNAME ?? "")
+    .split(",")
+    .map((hostname) => hostname.trim().toLowerCase())
+    .filter(Boolean);
+  if (!result.hostname || expectedHostnames.length === 0 || !expectedHostnames.includes(result.hostname.toLowerCase())) {
     throw new InquiryProtectionError(400, "verification_failed", "Please complete the verification and try again");
   }
-  if (result.action && result.action !== "inquiry_submit") {
+  if (result.action !== "inquiry_submit") {
     throw new InquiryProtectionError(400, "verification_failed", "Please complete the verification and try again");
   }
 }

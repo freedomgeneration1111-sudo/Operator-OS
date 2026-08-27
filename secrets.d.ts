@@ -13,6 +13,7 @@ interface Env {
   MESSAGING_DESTINATION_URL?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_EXPECTED_HOSTNAME?: string;
+  TURNSTILE_EXPECTED_HOSTNAMES?: string;
   TURNSTILE_TEST_BYPASS?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
@@ -48,6 +49,7 @@ declare namespace Cloudflare {
     MESSAGING_DESTINATION_URL?: string;
     TURNSTILE_SECRET_KEY?: string;
     TURNSTILE_EXPECTED_HOSTNAME?: string;
+    TURNSTILE_EXPECTED_HOSTNAMES?: string;
     TURNSTILE_TEST_BYPASS?: string;
     VAPID_PUBLIC_KEY?: string;
     VAPID_PRIVATE_KEY?: string;

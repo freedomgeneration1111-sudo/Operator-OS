@@ -11,7 +11,7 @@ Two business profiles exist today:
 | Key | Business | Status |
 |---|---|---|
 | `focus` | Focus Lab Productions | **Live.** Real customer traffic via the paired `Sunny-ops` repo. |
-| `moses` | Moses Jorgensen (consulting) | `PUBLIC_API_ENABLED:"false"`, `publicChat:false` — no native chat/message-form traffic. Staff console **is live** at `staff.mosesjorgensen.com` (attached 2026-08-24). The API Worker (`moses-operator-api-staging`) has real deployments on record (`wrangler deployments list` — earliest 2026-08-17) contradicting any note that says "never deployed," but it's currently **un-deployable**: `deployments/moses-jorgensen/api.staging.jsonc` requires `WHATSAPP_ACCESS_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`/`WHATSAPP_WEBHOOK_VERIFY_TOKEN`/`WHATSAPP_APP_SECRET` and none are provisioned (`wrangler secret list` confirms), so `wrangler deploy` hard-fails before upload. Whatever code shipped there on 2026-08-17 is what's still live — verify against current `src/` before assuming parity. |
+| `moses` | Moses Jorgensen (consulting) | Public native chat and the Access-protected staff console are live. A typed public consulting-inquiry route is implemented in source for the 2026 site redesign. The next API deployment is deliberately blocked until the Moses Turnstile widget secret is provisioned; source/config may therefore be ahead of the currently deployed Worker. |
 
 Stack: TypeScript, Cloudflare Workers, D1, Durable Objects (`ChatRoom`, `StaffChatHub`), Zod-validated contracts, `jose` for Access JWT verification, Vitest (`@cloudflare/vitest-pool-workers`), a separate React/Vite staff PWA (`staff-app/`).
 
@@ -24,7 +24,7 @@ Every deployment target is its own config file under `deployments/<business>/`. 
 | `deployments/focus-lab/api.staging.jsonc` | `focus-lab-api-staging` | Core API — chat, CRM, scheduling, availability. Service-bound from `Sunny-ops`' public site (`OPERATIONS_API`) and from the staff console (`CHAT_API`). | **Live.** "Staging" is a legacy name — this takes real customer traffic. |
 | `deployments/focus-lab/console.staging.jsonc` | via `staff:build:focus:staging` + deploy | Staff PWA. | **Live**, bound to custom domain `staff.focuslabproductions.com` *and* the `workers.dev` route, kept in parallel during the transition. As of 2026-08-24 this file is the sole authoritative home for that route (see ADR-0004) — it previously lived only in root `wrangler.jsonc`'s `env.staging`, which was a live/deploy-config split; that route was removed from root `wrangler.jsonc` in the same pass. |
 | Root `wrangler.jsonc` (no `--config`, or `--env staging`) | `focus-lab-operations` / `focus-lab-operations-staging` | Local dev config. Its `env.staging` block still exists and targets the same Worker name as `deployments/focus-lab/console.staging.jsonc`, but no longer carries the custom-domain route — don't re-add it there. | Legacy/local-dev; not the deploy path the npm scripts use. |
-| `deployments/moses-jorgensen/api.staging.jsonc` | `moses-operator-api-staging` | Moses profile's API. | Has real deployments on record but is **currently un-deployable** — required WhatsApp secrets are missing. See the profile table above. |
+| `deployments/moses-jorgensen/api.staging.jsonc` | `moses-operator-api-staging` | Moses profile's API. | **Live** for native chat. The next deploy requires the pending `TURNSTILE_SECRET_KEY` used by the new structured consulting inquiry. |
 | `deployments/moses-jorgensen/console.staging.jsonc` | via `staff:build:moses:staging` + deploy | Moses profile's staff console. | **Live**, bound to custom domain `staff.mosesjorgensen.com` (attached 2026-08-24, see ADR-0004) *and* the `workers.dev` route. |
 
 ```bash
@@ -37,13 +37,13 @@ Deploying anything is a real, hard-to-reverse action against a live system with 
 
 ## 3. The paired frontend repo
 
-The public-facing site and its `/v1/*` proxy live in a **separate repo**: `/home/moses/projects/Sunny-ops`. It has its own `CLAUDE.md`/`AGENTS.md`. Changes to request/response shapes here need to stay compatible with what that repo's `lib/operations-api.ts` expects — check there before changing a contract. Do not attempt to build or modify the frontend from inside this repo.
+The Focus Lab public site and its `/v1/*` proxy live in `/home/moses/projects/Sunny-ops`. The Moses public site and its matching same-origin proxy live in `/home/moses/projects/Moses`. Each repo has its own guidance. Changes to public request/response shapes here must stay compatible with the corresponding frontend API client.
 
 ## 4. Secrets and D1
 
 - Never commit secrets. `wrangler secret put <NAME> --config <deployment-config>` for anything real; `.dev.vars` (gitignored) for local.
 - `wrangler d1 migrations apply <db-name> --remote --config <deployment-config>` applies migrations independently of a Worker code deploy — the two are not coupled. Don't assume a fresh code deploy means the schema is current, or vice versa; check both.
-- `focuslab-crm-staging` is the live D1 database despite the name. `moses-operator-crm-staging` exists but is unused.
+- `focuslab-crm-staging` and `moses-operator-crm-staging` are live, deployment-isolated D1 databases despite their legacy names. Never copy data or identifiers between them.
 
 ## 5. Testing
 

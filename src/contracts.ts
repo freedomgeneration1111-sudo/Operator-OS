@@ -71,6 +71,15 @@ export const consultingInquirySchema=z.object({
   utmCampaign:optionalText(200),
   utmTerm:optionalText(200),
   utmContent:optionalText(200),
+  firstTouchCapturedAt:z.string().datetime().optional(),
+  currentPage:optionalText(1000),
+  currentUtmSource:optionalText(200),
+  currentUtmMedium:optionalText(200),
+  currentUtmCampaign:optionalText(200),
+  currentUtmTerm:optionalText(200),
+  currentUtmContent:optionalText(200),
+  pageType:optionalText(100),
+  contentSlug:optionalText(200),
 }).strict().superRefine((value,context)=>{
   if(value.preferredContact==="phone"&&!value.phone)context.addIssue({code:"custom",path:["phone"],message:"Phone is required for phone contact"});
 });

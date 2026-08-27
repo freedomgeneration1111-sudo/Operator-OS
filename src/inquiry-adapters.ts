@@ -2,7 +2,7 @@ import type { ConsultingInquiryInput,FocusInquiryCreatedResponse,InquiryCreatedR
 import { createInquiry,type CreateInquiryCommand } from "./inquiry-service";
 
 const FOCUS_ACKNOWLEDGEMENT="Your inquiry was received for human review. This is not an availability confirmation.";
-const CONSULTING_ACKNOWLEDGEMENT="Your inquiry was received for human review.";
+const CONSULTING_ACKNOWLEDGEMENT="Thanks — your note is in. I review every inquiry personally and will reply by email when there appears to be a useful next step.";
 
 export async function createFocusInquiry(db:D1Database,input:InquiryRequest,idempotencyKey:string,now:string):Promise<FocusInquiryCreatedResponse>{
   const result=await createInquiry(db,focusCommand(input,now),idempotencyKey,now);
@@ -30,7 +30,7 @@ export function consultingCommand(input:ConsultingInquiryInput,now:string):Creat
     contact:{fullName:input.name,email:input.email,phone:input.phone,preferredContact:input.preferredContact},
     inquiry:{sourceChannel:input.source??"consulting_intake",budgetContext:input.budget,customerNote:input.note},
     intake:{formSchemaKey:"moses.website.consulting-inquiry",schemaVersion:1,origin:"moses_public_website",payload:{...input}},
-    attribution:{referral:input.referralSource,landingPage:input.landingPage,referrer:input.referrer,utmSource:input.utmSource,utmMedium:input.utmMedium,utmCampaign:input.utmCampaign,utmTerm:input.utmTerm,utmContent:input.utmContent,capturedAt:now},
+    attribution:{referral:input.referralSource,landingPage:input.landingPage,referrer:input.referrer,utmSource:input.utmSource,utmMedium:input.utmMedium,utmCampaign:input.utmCampaign,utmTerm:input.utmTerm,utmContent:input.utmContent,capturedAt:input.firstTouchCapturedAt??now},
     extension:{kind:"consulting",organization:input.organization,offerServiceArea:input.offerServiceArea,situationProblem:input.situationProblem,desiredOutcome:input.desiredOutcome,timeline:input.timeline,budget:input.budget,countryRegion:input.countryRegion,referralSource:input.referralSource},
     acknowledgementMessage:CONSULTING_ACKNOWLEDGEMENT,
   };

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe,expect,it,vi } from "vitest";
-import { dispatchOpsNotificationEmail } from "../src/ops-notify";
+import { dispatchConsultingInquiryNotificationEmail,dispatchOpsNotificationEmail } from "../src/ops-notify";
 
 const configuredEnv={...env,RESEND_API_KEY:"test-key",CUSTOMER_EMAIL_FROM:"Focus Lab <replies@example.test>",OPS_NOTIFY_EMAIL:"ops@example.test",STAFF_CONSOLE_ORIGIN:"https://staff.example.test"} as typeof env;
 
@@ -66,5 +66,33 @@ describe("ops notification email",()=>{
     const conversation=await seedConversation();
     const fetcher=vi.fn(async()=>new Response("rejected",{status:429}));
     await expect(dispatchOpsNotificationEmail(configuredEnv,event(conversation),fetcher as unknown as typeof fetch)).rejects.toThrow();
+  });
+});
+
+describe("consulting inquiry notification email",()=>{
+  it("sends the problem, attribution, and staff inquiry deep link",async()=>{
+    const now="2026-08-25T18:00:00.000Z";
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO contacts VALUES (?,?,?,?,?,?,?)").bind("con_consulting_notice","Inquiry Test","lead@example.test",null,"email",now,now),
+      env.DB.prepare(`INSERT INTO inquiries (id,contact_id,event_id,source_channel,workflow_state,idempotency_key,created_at,updated_at)
+        VALUES (?, ?, NULL, 'website_consulting', 'new', ?, ?, ?)`).bind("inq_consulting_notice","con_consulting_notice","notice-key-00000001",now,now),
+      env.DB.prepare(`INSERT INTO consulting_details (inquiry_id,organization,situation_problem,created_at,updated_at)
+        VALUES (?, ?, ?, ?, ?)`).bind("inq_consulting_notice","Example Studio","The inquiry path is fragmented.",now,now),
+      env.DB.prepare(`INSERT INTO intake_submissions
+        (id,inquiry_id,form_schema_key,schema_version,origin,source_channel,landing_page,utm_source,utm_medium,utm_campaign,captured_at,received_at,payload_json)
+        VALUES (?, ?, 'moses.website.consulting-inquiry', 1, 'moses_public_website', 'website_consulting', ?, ?, ?, ?, ?, ?, '{}')`)
+        .bind("int_consulting_notice","inq_consulting_notice","https://mosesjorgensen.com/field-notes/example/","newsletter","email","systems-note",now,now),
+    ]);
+    const fetcher=vi.fn(async(_input:RequestInfo|URL,init?:RequestInit)=>{
+      const request=JSON.parse(String(init?.body)) as Record<string,unknown>;
+      expect(String(request.subject)).toContain("New consulting inquiry from Inquiry Test");
+      expect(String(request.text)).toContain("The inquiry path is fragmented.");
+      expect(String(request.text)).toContain("UTM campaign: systems-note");
+      expect(String(request.text)).toContain("https://staff.example.test/#/inquiry/inq_consulting_notice");
+      return Response.json({id:"resend_consulting_notice_id"});
+    });
+    const mosesEnv={...configuredEnv,BUSINESS_PROFILE:"moses"} as typeof env;
+    await dispatchConsultingInquiryNotificationEmail(mosesEnv,{inquiryId:"inq_consulting_notice"},fetcher as unknown as typeof fetch);
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 });
