@@ -153,3 +153,96 @@ ADR-0006's code decisions are **not** implemented here. Still open:
   mirrors is committed as of `69ad652`).
 
 Decisions 1, 4, and 6 require no code (they are "do nothing / already done / rejected").
+
+---
+
+# Addendum — Decision 3 implemented (2026-08-27)
+
+Second pass. **ADR-0006 Decision 3 is now implemented and pushed.** Decisions 2 and 5 remain
+open (see updated status at the bottom).
+
+## Commit
+
+| Commit | Subject | On `origin/main` |
+|---|---|---|
+| `8152c5ea579aab14d92bb4945456ecf05131401f` | `feat: promote availabilityChecked to a queryable intake_submissions column (ADR-0006 Decision 3)` | yes — pushed `6dd0875..8152c5e` |
+
+Base: `6dd0875` (the previous pass's last commit, already on `origin/main` before this pass).
+7 files changed, 25 insertions(+), 10 deletions(-).
+
+## Migration
+
+`migrations/0008_intake_availability_checked.sql` — created and **applied to local D1**
+(`focus-lab-operations-local`, `wrangler d1 migrations apply … --local`):
+
+```sql
+PRAGMA foreign_keys = ON;
+
+ALTER TABLE intake_submissions
+  ADD COLUMN availability_checked INTEGER CHECK (availability_checked IN (0,1));
+```
+
+Verified post-apply via `pragma_table_info`: column `availability_checked`, type `INTEGER`,
+`notnull = 0`, `dflt_value = null` — nullable, no default, exactly as the ADR's Data model change
+section specifies. Existing rows are `NULL`. A new column carrying its own `CHECK` is a plain
+additive `ALTER TABLE` (no `0006`-style table rebuild). The test harness
+(`readD1Migrations("migrations")` in `vitest.config.mts` → `test/setup.ts`) picks it up
+automatically.
+
+## The six code sites (per ADR Decision 3)
+
+| # | Site | Change |
+|---|---|---|
+| 1 | `commandSchema.intake` — `src/inquiry-service.ts` | added `availabilityChecked: z.boolean().nullish()` to the `intake` object (the inner `z.object` strips unknown keys, so it had to be declared to survive parsing) |
+| 2 | `intake_submissions` INSERT — `src/inquiry-service.ts` | column + bind added (17 → 18 cols / placeholders); value = `command.intake.availabilityChecked == null ? null : command.intake.availabilityChecked ? 1 : 0`; `payload_json` unchanged (still carries the raw value) |
+| 3 | `focusCommand` — `src/inquiry-adapters.ts` | `intake` object now passes `availabilityChecked: input.availabilityChecked`. `consultingCommand` intentionally untouched — consulting inquiries have no availability check, so the field is absent → persisted `NULL` |
+| 4 | `getInquiryDetail` SELECT — `src/repository.ts` | `availability_checked` added to the `intake_submissions` column list |
+| 5 | `intakeSubmissions` type — `staff-app/src/lib/types.ts` | row shape gains `availability_checked: number \| null` |
+| 6 | `InquiryDetailView.tsx` | `const availabilityChecked = detail.intakeSubmissions[0]?.availability_checked === 1` (latest submission, list is `received_at DESC`); renders `<span className="badge neutral">Availability checked</span>` on the **existing header badge-row** (line 18) only when true. No new panel. Reused the existing `badge neutral` class — no `styles.css` change, so the change stays within the six sites the ADR names. |
+
+## Test suite — full run, zero failures
+
+| Suite | Result |
+|---|---|
+| `npm run test:operations` | **151 passed** / 19 files (was 150; +1 new test) |
+| `npm run test:config-isolation` | **3 / 3 passed** |
+| `npm run staff:test` | **32 / 32 passed** |
+| `npm run test:staff:e2e` (Playwright) | **21 passed, 2 skipped, 0 failed** — run this pass; the change touches `InquiryDetailView.tsx`, whose e2e mocks supply `intakeSubmissions: []` (badge correctly absent) |
+| `npm run typecheck` / `staff:typecheck` | clean |
+| `npm run lint` / `staff:lint` | clean |
+
+### Two test edits, both required companions to the migration
+
+1. **`test/api.test.ts:103`** — `expect(… COUNT(*) … FROM d1_migrations …).toBe(7)` → `toBe(8)`.
+   This assertion is a "did every migration apply" fixture; it hard-codes the migration count and
+   must be bumped whenever a migration file is added (the same way
+   `test/migration-business-neutral.test.ts` uses `slice(0,5)` / `[5]` indices). Adding `0008` made
+   the applied count 8. This surfaced as the **one** initial failure in `test:operations` and was
+   fixed in place — a mechanical fixture bump caused solely by the new migration, not a masked
+   regression, so it did not warrant halting the step.
+2. **`test/api.test.ts`** — new test `"promotes availabilityChecked onto
+   intake_submissions.availability_checked, defaulting to NULL"`: posts `{...validInquiry,
+   availabilityChecked: true}` → asserts the column is `1`; posts `validInquiry` (field absent) →
+   asserts the column is `NULL`. Covers the round trip end to end (`POST /v1/inquiries` →
+   `focusCommand` → `commandSchema` → INSERT → D1).
+
+## Definition of done
+
+- [x] Migration `0008` created and applied locally (verified: column present, `INTEGER`, nullable,
+      no default).
+- [x] All six code sites updated (table above).
+- [x] Full test suite passes with zero failures (`test:operations` 151, `config-isolation` 3,
+      `staff:test` 32, `staff:e2e` 21/2-skip, typecheck + lint clean).
+- [x] Committed — `8152c5e`.
+- [x] Pushed to `origin/main` — `6dd0875..8152c5e`.
+- [x] This addendum appended to `docs/audits/ADR-0006-implementation-report.md` with the commit
+      hash.
+
+## Updated ADR-0006 status
+
+| Decision | Status |
+|---|---|
+| 1, 4, 6 | No code required (do nothing / already done / rejected) |
+| **3** | **Done** — `8152c5e` |
+| 2 | Open — `handleAvailability` D1 read + `API.md`/`openapi.yaml` update + `test/availability-api.test.ts` cases |
+| 5 | Open — `dispatchEventInquiryNotificationEmail` in `src/ops-notify.ts`, fired from the `kind === "event"` branch of `publicInquiry` (unblocked; mirrors the consulting notification in `69ad652`) |
