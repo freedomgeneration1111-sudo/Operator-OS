@@ -6,7 +6,7 @@ import { consultingInquirySchema,inquiryRequestSchema,type ApiErrorResponse } fr
 import { handleCrm } from "./crm";
 import { createConsultingInquiry,createFocusInquiry } from "./inquiry-adapters";
 import { enforceInquiryProtection,InquiryProtectionError } from "./inquiry-protection";
-import { dispatchConsultingInquiryNotificationEmail } from "./ops-notify";
+import { dispatchConsultingInquiryNotificationEmail,dispatchEventInquiryNotificationEmail } from "./ops-notify";
 import { handleStaffApi } from "./staff-api";
 import { NativeChatError,internalConversationRoute,nativeChatStatus,publicConversationRoute,publicResumeConversation,startNativeConversation } from "./native-chat";
 import { handlePushApi } from "./push";
@@ -33,6 +33,11 @@ async function publicInquiry(request:Request,env:Env,ctx:ExecutionContext,kind:"
     const parsed=inquiryRequestSchema.safeParse(inquiryInput);
     if(!parsed.success)throw new PublicError(422,"validation_error","Request validation failed",parsed.error.flatten().fieldErrors as Record<string,string[]>);
     const result=await createFocusInquiry(env.DB,parsed.data,key,now);
+    if(!result.idempotentReplay){
+      ctx.waitUntil(dispatchEventInquiryNotificationEmail(env,{inquiryId:result.inquiryId}).catch((error:unknown)=>{
+        console.error(JSON.stringify({message:"event inquiry notification failed",inquiryId:result.inquiryId,error:error instanceof Error?error.message:"Unknown error"}));
+      }));
+    }
     return json(result,result.idempotentReplay?200:201);
   }
   const parsed=consultingInquirySchema.safeParse(inquiryInput);

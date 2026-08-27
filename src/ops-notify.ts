@@ -2,9 +2,14 @@ import { resolveClientBusinessProfile } from "../business-profiles.mts";
 
 export type OpsNotificationEvent={conversationId:string;sequence:number;senderKind:string};
 export type ConsultingInquiryNotificationEvent={inquiryId:string};
+export type EventInquiryNotificationEvent={inquiryId:string};
 type ConversationContactRow={reply_email:number;reply_sms:number;reply_call:number;full_name:string;email:string|null;phone:string|null;body:string};
 type ConsultingInquiryRow={
   full_name:string;email:string|null;phone:string|null;organization:string|null;situation_problem:string|null;
+  source_channel:string;landing_page:string|null;utm_source:string|null;utm_medium:string|null;utm_campaign:string|null;
+};
+type EventInquiryRow={
+  full_name:string;email:string|null;phone:string|null;event_family:string|null;start_date:string|null;end_date:string|null;venue_location:string|null;
   source_channel:string;landing_page:string|null;utm_source:string|null;utm_medium:string|null;utm_campaign:string|null;
 };
 
@@ -83,4 +88,55 @@ ${attribution?`\n${attribution}\n`:""}${deepLink?`\nOpen in staff console: ${dee
     }),
   });
   if(!response.ok)throw new Error(`Resend rejected the consulting inquiry notification (${response.status})`);
+}
+
+export async function dispatchEventInquiryNotificationEmail(
+  env:Env,
+  event:EventInquiryNotificationEvent,
+  fetcher:typeof fetch=fetch,
+):Promise<void>{
+  const profile=resolveClientBusinessProfile(env.BUSINESS_PROFILE);
+  if(!profile.capabilities.opsNotifyEmail)return;
+  if(!env.RESEND_API_KEY||!env.CUSTOMER_EMAIL_FROM||!env.OPS_NOTIFY_EMAIL){
+    console.warn(JSON.stringify({message:"event inquiry notification skipped: not configured",inquiryId:event.inquiryId}));
+    return;
+  }
+  const row=await env.DB.prepare(`SELECT c.full_name,c.email,c.phone,e.event_family,e.start_date,e.end_date,e.venue_location,
+      i.source_channel,s.landing_page,s.utm_source,s.utm_medium,s.utm_campaign
+    FROM inquiries i
+    JOIN contacts c ON c.id=i.contact_id
+    JOIN events e ON e.id=i.event_id
+    LEFT JOIN intake_submissions s ON s.inquiry_id=i.id
+    WHERE i.id=?
+    ORDER BY s.received_at DESC
+    LIMIT 1`).bind(event.inquiryId).first<EventInquiryRow>();
+  if(!row)return;
+  const deepLink=env.STAFF_CONSOLE_ORIGIN?`${env.STAFF_CONSOLE_ORIGIN.replace(/\/$/,"")}/#/inquiry/${encodeURIComponent(event.inquiryId)}`:null;
+  const dates=row.start_date?(row.end_date&&row.end_date!==row.start_date?`${row.start_date} to ${row.end_date}`:row.start_date):"Not supplied";
+  const attribution=[
+    row.source_channel?`Source: ${row.source_channel}`:null,
+    row.landing_page?`Landing page: ${row.landing_page}`:null,
+    row.utm_source?`UTM source: ${row.utm_source}`:null,
+    row.utm_medium?`UTM medium: ${row.utm_medium}`:null,
+    row.utm_campaign?`UTM campaign: ${row.utm_campaign}`:null,
+  ].filter(Boolean).join("\n");
+  const text=`New event inquiry from ${row.full_name}
+
+Event type: ${row.event_family??"Not supplied"}
+Dates: ${dates}
+Venue/location: ${row.venue_location??"Not supplied"}
+
+Email: ${row.email??"Not supplied"}
+Phone: ${row.phone??"Not supplied"}
+${attribution?`\n${attribution}\n`:""}${deepLink?`\nOpen in staff console: ${deepLink}`:""}`;
+  const response=await fetcher("https://api.resend.com/emails",{
+    method:"POST",
+    headers:{Authorization:`Bearer ${env.RESEND_API_KEY}`,"Content-Type":"application/json"},
+    body:JSON.stringify({
+      from:env.CUSTOMER_EMAIL_FROM,to:[env.OPS_NOTIFY_EMAIL],
+      subject:`New event inquiry from ${row.full_name} — ${profile.shortName}`,
+      text,
+    }),
+  });
+  if(!response.ok)throw new Error(`Resend rejected the event inquiry notification (${response.status})`);
 }

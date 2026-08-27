@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe,expect,it,vi } from "vitest";
-import { dispatchConsultingInquiryNotificationEmail,dispatchOpsNotificationEmail } from "../src/ops-notify";
+import { dispatchConsultingInquiryNotificationEmail,dispatchEventInquiryNotificationEmail,dispatchOpsNotificationEmail } from "../src/ops-notify";
 
 const configuredEnv={...env,RESEND_API_KEY:"test-key",CUSTOMER_EMAIL_FROM:"Focus Lab <replies@example.test>",OPS_NOTIFY_EMAIL:"ops@example.test",STAFF_CONSOLE_ORIGIN:"https://staff.example.test"} as typeof env;
 
@@ -93,6 +93,42 @@ describe("consulting inquiry notification email",()=>{
     });
     const mosesEnv={...configuredEnv,BUSINESS_PROFILE:"moses"} as typeof env;
     await dispatchConsultingInquiryNotificationEmail(mosesEnv,{inquiryId:"inq_consulting_notice"},fetcher as unknown as typeof fetch);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+});
+
+describe("event inquiry notification email",()=>{
+  it("skips silently when Resend/ops-email config is absent, without throwing",async()=>{
+    const fetcher=vi.fn();
+    await expect(dispatchEventInquiryNotificationEmail(env,{inquiryId:"inq_missing_config"},fetcher as unknown as typeof fetch)).resolves.toBeUndefined();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("sends the event type, dates, contact details, attribution, and staff inquiry deep link",async()=>{
+    const now="2026-08-27T18:00:00.000Z";
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO contacts VALUES (?,?,?,?,?,?,?)").bind("con_event_notice","Event Lead","event.lead@example.test","555-0142","email",now,now),
+      env.DB.prepare(`INSERT INTO events (id,event_family,start_date,end_date,venue_location,blocks_capacity,scheduling_state,created_at,updated_at)
+        VALUES (?, 'Wedding', '2027-06-10', '2027-06-12', 'Dallas, TX', 0, 'requested', ?, ?)`).bind("evt_event_notice",now,now),
+      env.DB.prepare(`INSERT INTO inquiries (id,contact_id,event_id,source_channel,workflow_state,idempotency_key,created_at,updated_at)
+        VALUES (?, ?, ?, 'website', 'new', ?, ?, ?)`).bind("inq_event_notice","con_event_notice","evt_event_notice","event-notice-key-0001",now,now),
+      env.DB.prepare(`INSERT INTO intake_submissions
+        (id,inquiry_id,form_schema_key,schema_version,origin,source_channel,landing_page,utm_source,utm_medium,utm_campaign,captured_at,received_at,payload_json)
+        VALUES (?, ?, 'focus.website.event-inquiry', 1, 'focus_public_website', 'website', ?, ?, ?, ?, ?, ?, '{}')`)
+        .bind("int_event_notice","inq_event_notice","https://focuslabproductions.com/check-availability/","google","cpc","summer-weddings",now,now),
+    ]);
+    const fetcher=vi.fn(async(_input:RequestInfo|URL,init?:RequestInit)=>{
+      const request=JSON.parse(String(init?.body)) as Record<string,unknown>;
+      expect(request).toMatchObject({from:"Focus Lab <replies@example.test>",to:["ops@example.test"]});
+      expect(String(request.subject)).toContain("New event inquiry from Event Lead");
+      expect(String(request.text)).toContain("Event type: Wedding");
+      expect(String(request.text)).toContain("Dates: 2027-06-10 to 2027-06-12");
+      expect(String(request.text)).toContain("Venue/location: Dallas, TX");
+      expect(String(request.text)).toContain("555-0142");
+      expect(String(request.text)).toContain("UTM campaign: summer-weddings");
+      expect(String(request.text)).toContain("https://staff.example.test/#/inquiry/inq_event_notice");
+      return Response.json({id:"resend_event_notice_id"});
+    });
+    await dispatchEventInquiryNotificationEmail(configuredEnv,{inquiryId:"inq_event_notice"},fetcher as unknown as typeof fetch);
     expect(fetcher).toHaveBeenCalledOnce();
   });
 });
