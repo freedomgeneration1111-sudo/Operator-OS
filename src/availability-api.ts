@@ -49,6 +49,8 @@ export function blockedDatesFromWindows(windows: SchedulingWindow[]): Set<string
  * Pure: resolves a single date's status plus, when booked, nearby available alternatives — no I/O.
  * `blockedDates` is the caller-supplied set of internally capacity-blocking dates (read from D1 in the
  * handler); it is unioned into the KV busy-date set before both the status decision and the nearby scan.
+ * An internally-blocked date resolves `"unavailable"` regardless of KV/Google cache state
+ * (ADR-0006 Decision 2) — this check runs before the no-cache / out-of-window `"unknown"` fallthrough.
  */
 export function resolveAvailability(
   cache: AvailabilityCache | null,
@@ -56,7 +58,9 @@ export function resolveAvailability(
   todayIso: string,
   blockedDates: ReadonlySet<string> = new Set(),
 ): AvailabilityResponse {
-  if (!cache || date < cache.windowStart || date > cache.windowEnd) return { ok: true, date, status: "unknown" };
+  if (!cache || date < cache.windowStart || date > cache.windowEnd) {
+    return { ok: true, date, status: blockedDates.has(date) ? "unavailable" : "unknown" };
+  }
   const busy = new Set(cache.busyDates);
   for (const blocked of blockedDates) busy.add(blocked);
   const status: AvailabilityStatus = busy.has(date) ? "unavailable" : "available";
@@ -86,10 +90,11 @@ async function enforceRateLimit(request: Request, env: AvailabilityApiEnv): Prom
 }
 
 /**
- * GET /v1/availability?date=YYYY-MM-DD. Reads the KV busy-date cache and, when that cache is fresh and
- * the requested date is in-window, the D1 `events` table for capacity-blocking days (via
- * `listBlockingWindows`) — the only backend touch on the request path. Never calls Google on the
- * request path; returns no event data, only date/status.
+ * GET /v1/availability?date=YYYY-MM-DD. Reads the KV busy-date cache and, for an in-window date, the
+ * D1 `events` table for capacity-blocking days (via `listBlockingWindows`) — the only backend touch
+ * on the request path. The D1 check runs regardless of KV cache freshness (ADR-0006 Decision 2): the
+ * Google-fed cache no-ops in production today, so gating it on freshness would mean it never fires.
+ * Never calls Google on the request path; returns no event data, only date/status.
  */
 export async function handleAvailability(request: Request, env: AvailabilityApiEnv, now: Date = new Date()): Promise<Response> {
   await enforceRateLimit(request, env);
@@ -100,10 +105,14 @@ export async function handleAvailability(request: Request, env: AvailabilityApiE
   const staleMinutes = positiveInteger(env.AVAILABILITY_CACHE_STALE_MINUTES, 30);
   const fresh = cache && isFresh(cache, now, staleMinutes) ? cache : null;
   const todayIso = isoDateInTimeZone(now, fresh?.timeZone ?? "UTC");
-  // Only touch D1 when the KV cache is fresh and the requested date is in-window — otherwise
-  // resolveAvailability short-circuits to "unknown" and the blocked-date set is irrelevant.
-  const blockedDates = fresh && env.DB && parsed.data >= fresh.windowStart && parsed.data <= fresh.windowEnd
-    ? blockedDatesFromWindows(await listBlockingWindows(env.DB, fresh.windowStart, fresh.windowEnd))
+  // Relevance/perf bound only — the requested date must fall inside a tracked window: the cache's
+  // window when a cache exists (fresh or not), otherwise just the requested day. Freshness is NOT
+  // a precondition here — a capacity-blocking event in D1 makes the date unavailable even when the
+  // KV cache is stale or missing.
+  const windowStart = cache?.windowStart ?? parsed.data;
+  const windowEnd = cache?.windowEnd ?? parsed.data;
+  const blockedDates = env.DB && parsed.data >= windowStart && parsed.data <= windowEnd
+    ? blockedDatesFromWindows(await listBlockingWindows(env.DB, windowStart, windowEnd))
     : new Set<string>();
   const body = resolveAvailability(fresh, parsed.data, todayIso, blockedDates);
   return Response.json(body, { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=60" } });

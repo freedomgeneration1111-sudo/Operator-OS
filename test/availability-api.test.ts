@@ -69,6 +69,37 @@ describe("handleAvailability",() => {
     expect(nearbyDates).toEqual(["2026-09-09","2026-09-12","2026-09-08"]);
   });
 
+  // Regression: the D1 blocking check must NOT be gated on KV cache freshness. Google credentials
+  // are unprovisioned in the live focus deployment (ADR-0001 deferred), so refreshAvailabilityCache
+  // no-ops and the cache is essentially always stale or missing there — the exact state the earlier
+  // "date clear in KV" test skipped by using a fresh cache.
+  it("resolves unavailable from a D1 capacity-blocking event when the KV cache is missing entirely",async () => {
+    await env.AVAILABILITY_CACHE.delete(AVAILABILITY_CACHE_KEY);
+    const iso = "2026-09-01T00:00:00.000Z";
+    await env.DB.prepare(`INSERT INTO events (id,event_family,start_date,end_date,blocks_capacity,scheduling_state,created_at,updated_at)
+      VALUES (?, 'Wedding', '2026-09-15', '2026-09-15', 1, 'confirmed', ?, ?)`).bind("evt_avail_nocache",iso,iso).run();
+    const request = new Request("https://operations.example.test/v1/availability?date=2026-09-15",{ headers: { "CF-Connecting-IP": "192.0.2.32" } });
+    const body = await (await handleAvailability(request,env,now)).json() as { status: string };
+    expect(body.status).toBe("unavailable");
+  });
+
+  it("resolves unavailable from a D1 capacity-blocking event when the KV cache is stale",async () => {
+    const iso = "2026-09-01T00:00:00.000Z";
+    await env.DB.prepare(`INSERT INTO events (id,event_family,start_date,end_date,blocks_capacity,scheduling_state,created_at,updated_at)
+      VALUES (?, 'Wedding', '2026-09-15', '2026-09-15', 1, 'confirmed', ?, ?)`).bind("evt_avail_stale",iso,iso).run();
+    const wayLater = new Date("2026-09-06T12:00:00.000Z"); // >30 minutes after cache.generatedAt — stale
+    const request = new Request("https://operations.example.test/v1/availability?date=2026-09-15",{ headers: { "CF-Connecting-IP": "192.0.2.33" } });
+    const body = await (await handleAvailability(request,{ ...env,AVAILABILITY_CACHE_STALE_MINUTES: "30" },wayLater)).json() as { status: string };
+    expect(body.status).toBe("unavailable");
+  });
+
+  it("still resolves a D1-clear date to unknown when the KV cache is stale",async () => {
+    const wayLater = new Date("2026-09-06T12:00:00.000Z");
+    const request = new Request("https://operations.example.test/v1/availability?date=2026-09-15",{ headers: { "CF-Connecting-IP": "192.0.2.34" } });
+    const body = await (await handleAvailability(request,{ ...env,AVAILABILITY_CACHE_STALE_MINUTES: "30" },wayLater)).json() as { status: string };
+    expect(body.status).toBe("unknown"); // no blocking event in D1, cache stale — unchanged behavior
+  });
+
   it("falls back to unknown when the cache is older than the staleness threshold",async () => {
     const request = new Request("https://operations.example.test/v1/availability?date=2026-09-15",{ headers: { "CF-Connecting-IP": "192.0.2.13" } });
     const wayLater = new Date("2026-09-06T12:00:00.000Z"); // >30 minutes after generatedAt
