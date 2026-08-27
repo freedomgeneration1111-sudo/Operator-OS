@@ -352,3 +352,162 @@ assertion is affected.
 | **3** | **Done** — `8152c5e` |
 | **5** | **Done** — `2210bb6` |
 | 2 | Open — `handleAvailability` D1 read + `API.md`/`openapi.yaml` update + `test/availability-api.test.ts` cases |
+
+---
+
+# Addendum — Decision 2 implemented (2026-08-27)
+
+Fourth pass. **ADR-0006 Decision 2 is now implemented and pushed. All three code decisions are
+complete.**
+
+## Precondition check
+
+Decisions 3 (`8152c5e`) and 5 (`2210bb6`) both confirmed as ancestors of `HEAD`
+(`git merge-base --is-ancestor`) before starting — migration `0008` present, and
+`dispatchEventInquiryNotificationEmail` present in `src/ops-notify.ts`.
+
+## Commit
+
+| Commit | Subject | On `origin/main` |
+|---|---|---|
+| `d36bdc7500138a4fcc9285a545006a94421ee939` | `feat: availability check also reads D1 capacity-blocking events (ADR-0006 Decision 2)` | yes — pushed `fa74515..d36bdc7` |
+
+4 files changed, 63 insertions(+), 9 deletions(-) — `src/availability-api.ts`,
+`test/availability-api.test.ts`, `API.md`, `openapi.yaml`, all in the one commit as the prompt
+required.
+
+## Code — `src/availability-api.ts`
+
+- **`resolveAvailability` stays pure.** New 4th parameter
+  `blockedDates: ReadonlySet<string> = new Set()` — no `D1Database`, no `env`, no `async`. The set
+  is unioned into `busy` on the line immediately after `const busy = new Set(cache.busyDates)`, i.e.
+  **before** the `busy.has(date)` status decision **and** before the nearby loop (which reads the
+  same `busy` via `busy.has(candidate)`). Default empty set means the six existing 3-argument
+  `resolveAvailability` unit tests are unaffected.
+- **`blockedDatesFromWindows(windows)`** — new pure helper. Expands each `SchedulingWindow`'s
+  `startDate..(endDate ?? startDate)` span to individual ISO dates via the existing `isoDatesBetween`
+  helper (`src/availability-timezone.ts`), skipping windows with no `startDate`.
+- **`handleAvailability` does the D1 read.** `AvailabilityApiEnv` gains optional `DB?: D1Database`.
+  The handler calls `listBlockingWindows(env.DB, fresh.windowStart, fresh.windowEnd)` (the existing
+  predicate in `src/repository.ts` — `blocks_capacity=1 AND scheduling_state NOT IN
+  ('cancelled','declined')`, overlapping the window; indexed by `events_capacity_range_idx`), passes
+  it through `blockedDatesFromWindows`, and hands the result to `resolveAvailability`. Guarded:
+  the read only happens when `fresh && env.DB && requested date is within [windowStart, windowEnd]`
+  — otherwise `resolveAvailability` short-circuits to `"unknown"` and the blocked set is
+  irrelevant, so no D1 query is issued.
+- Both doc comments (`resolveAvailability`, `handleAvailability`) updated; `handleAvailability` no
+  longer claims "cache-read only".
+
+## Docs — same commit
+
+- **`API.md`** — the `/v1/availability` row no longer says "cache-read only"; it now says
+  "resolves from the KV busy-date cache unioned with capacity-blocking `events` read from D1 on the
+  request path". The availability paragraph (§ after deployment selection) rewritten: the handler
+  reads KV **and**, when fresh + in-window, reads D1 for capacity-blocking events, unions their
+  whole spans into the busy set before the decision and the nearby scan, this D1 read is the only
+  backend touch on the request path and returns no event data, and if KV is missing/stale no D1
+  read happens.
+- **`openapi.yaml`** — `/v1/availability` `summary` and the `200` `description` updated to name the
+  KV+D1 merge and to keep the "never Google, never raw event data" guarantee explicit.
+
+## Tests — the two the ADR specifies
+
+`test/availability-api.test.ts`, `describe("handleAvailability")`:
+
+1. **"resolves unavailable for a date that is clear in KV but has a capacity-blocking event in
+   D1"** — seeds an `events` row (`blocks_capacity=1`, `scheduling_state='confirmed'`,
+   `2026-09-15`), a date **not** in `cache.busyDates`; asserts `status === "unavailable"`.
+2. **"never suggests an internally-blocked date as a nearby alternative"** — busy KV date
+   `2026-09-10`, seeds a blocking `events` row for `2026-09-11` (which the cache-only nearby scan
+   would otherwise offer first); asserts `nearby` excludes `2026-09-11` and equals
+   `["2026-09-09","2026-09-12","2026-09-08"]`.
+
+## Test suite — full run, zero failures
+
+| Suite | Result |
+|---|---|
+| `npm run test:operations` | **155 passed** / 19 files (was 153; +2) |
+| `npm run test:config-isolation` | **3 / 3 passed** |
+| `npm run staff:test` | **32 / 32 passed** |
+| `npm run test:staff:e2e` | **21 passed, 2 skipped, 0 failed** |
+| `npm run typecheck` / `staff:typecheck` | clean |
+| `npm run lint` / `staff:lint` | clean |
+
+**No companion-fixture exception used.** The existing `handleAvailability` tests run against an
+empty `events` table (`test/setup.ts` clears it each `beforeEach`), so `listBlockingWindows`
+returns `[]` and behavior there is byte-identical. No count/list assertion is affected.
+
+## Definition of done
+
+- [x] `handleAvailability` queries D1; `resolveAvailability` stays pure (param is
+      `ReadonlySet<string>`, no `D1Database` dependency).
+- [x] `busy` unions D1-blocked dates before both the status decision and the nearby scan.
+- [x] `API.md` and `openapi.yaml` updated in the same commit as the code (`d36bdc7`).
+- [x] Both new test cases added and passing.
+- [x] Full test suite passes with zero failures.
+- [x] Committed — `d36bdc7`.
+- [x] Pushed to `origin/main` — `fa74515..d36bdc7`.
+- [x] This addendum written; status table below updated to show Decision 2 done.
+
+## Updated ADR-0006 status
+
+| Decision | Status |
+|---|---|
+| 1, 4, 6 | No code required (do nothing / already done / rejected) |
+| **2** | **Done** — `d36bdc7` |
+| **3** | **Done** — `8152c5e` |
+| **5** | **Done** — `2210bb6` |
+
+**ADR-0006 is fully implemented.**
+
+---
+
+# Final record — ADR-0006 end to end
+
+Four passes, one branch (`main`), pushed to `origin/main`. Base before any of this work: `9bbf740`.
+
+## All commits, in order
+
+| # | Commit | Type | Summary |
+|---|---|---|---|
+| 1 | `69ad652` | feat | **Prerequisites.** `publicConsultingInquiry` feature committed off the dirty working tree (moses public consulting-inquiry intake + `dispatchConsultingInquiryNotificationEmail` + Turnstile `TURNSTILE_EXPECTED_HOSTNAMES` hardening + doc reconciliation). Unblocks Decision 5. |
+| 2 | `9c98fb1` | docs | The two backing audits: `2026-08-27-scheduling-integration-audit.md` and `2026-08-27-adr-0006-verification-addendum.md`. |
+| 3 | `73d9490` | docs | **ADR-0006 itself** — `docs/adr/ADR-0006-manual-booking-intake-and-availability-display.md`, verified byte-identical to the canonical text. |
+| 4 | `6dd0875` | docs | This implementation report (prerequisites-resolution pass). |
+| 5 | `8152c5e` | feat | **Decision 3.** `migrations/0008_intake_availability_checked.sql` + `availability_checked` threaded through all six code sites (`commandSchema.intake`, the `intake_submissions` INSERT, `focusCommand`, `getInquiryDetail`, staff-app `intakeSubmissions` type, `InquiryDetailView` header badge). Companion fixture: `test/api.test.ts` `d1_migrations` count `7 → 8`. |
+| 6 | `ddd3e34` | docs | Report addendum for Decision 3. |
+| 7 | `2210bb6` | feat | **Decision 5.** `dispatchEventInquiryNotificationEmail` in `src/ops-notify.ts` (guard-for-guard copy of the consulting notification), fired from the `kind === "event"` branch of `publicInquiry` on `!result.idempotentReplay`. |
+| 8 | `fa74515` | docs | Report addendum for Decision 5. |
+| 9 | `d36bdc7` | feat | **Decision 2.** `handleAvailability` reads D1 capacity-blocking events and unions them into the busy set before the decision and the nearby scan; `resolveAvailability` stays pure; `API.md` + `openapi.yaml` updated in the same commit. |
+| 10 | _(this commit)_ | docs | Report addendum for Decision 2 plus this end-to-end final record. |
+
+## What ADR-0006 changed, in the codebase
+
+- **New migration:** `0008` — `intake_submissions.availability_checked INTEGER CHECK (… IN (0,1))`,
+  nullable, no default.
+- **New public-path behavior:** `GET /v1/availability` now reads D1 (`events`, capacity-blocking,
+  in-window) in addition to the KV cache — the first backend touch on that path. Documented in
+  `API.md` and `openapi.yaml`.
+- **New staff notification:** `dispatchEventInquiryNotificationEmail` — staff get an email on every
+  new (non-replay) `focus` event inquiry, matching the consulting path. Capability- and
+  secret-guarded; no-ops when unconfigured.
+- **New staff-console signal:** an "Availability checked" badge on the inquiry-detail header when
+  the customer had confirmed the date was open before submitting.
+- **No new tables, no new endpoints, no new permissions, no reminder cron, no confirmation
+  automation** — Decision 1's "do nothing" scope held. The automated-confirmation design remains in
+  the ADR's Deferred appendix as a candidate future ADR-0007.
+
+## Not part of ADR-0006 (tracked elsewhere)
+
+- The `publicConsultingInquiry` feature (commit `69ad652`) was pre-existing uncommitted work that
+  Decision 5 depended on; it has no ADR of its own.
+- `Sunny-ops` front-end change to collapse the two-step "Check Your Date" flow into one continuous
+  step (ADR-0006 Decision 4 note / Open follow-ups) — no `operator-os` impact, not done here.
+- Staff PWA calendar view; reversing ADR-0001's Google Calendar deferral — Open follow-ups, not
+  done here.
+
+## Verification at close
+
+Full suite green on `d36bdc7`: `test:operations` 155, `test:config-isolation` 3, `staff:test` 32,
+`test:staff:e2e` 21 passed / 2 skipped, `typecheck` + `staff:typecheck` + `lint` + `staff:lint`
+clean. Working tree clean; `main` in sync with `origin/main`.
