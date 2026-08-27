@@ -511,3 +511,151 @@ Four passes, one branch (`main`), pushed to `origin/main`. Base before any of th
 Full suite green on `d36bdc7`: `test:operations` 155, `test:config-isolation` 3, `staff:test` 32,
 `test:staff:e2e` 21 passed / 2 skipped, `typecheck` + `staff:typecheck` + `lint` + `staff:lint`
 clean. Working tree clean; `main` in sync with `origin/main`.
+
+---
+
+# Addendum — Decision 2 freshness-gating bug fixed (2026-08-27)
+
+Fifth pass. A logic bug in Decision 2's first implementation (`d36bdc7`) was found and fixed
+before deploy.
+
+## Commit
+
+| Commit | Subject | On `origin/main` |
+|---|---|---|
+| `28dd37f2dc95f7c2332fb9d9f86cc4cffd3cbf72` | `fix: run the D1 blocking check regardless of KV cache freshness (ADR-0006 Decision 2)` | yes — pushed `38d00cc..28dd37f` |
+
+2 files changed, 49 insertions(+), 9 deletions(-) — `src/availability-api.ts`,
+`test/availability-api.test.ts`.
+
+## The bug
+
+Decision 2 requires the D1 blocking-events check to apply "independent of the KV/Google cache
+state" (ADR-0006 Decision 2). The first implementation gated the D1 read on `fresh` — the KV cache
+being both present **and** within `AVAILABILITY_CACHE_STALE_MINUTES`:
+
+```ts
+// d36bdc7 — buggy
+const blockedDates = fresh && env.DB && parsed.data >= fresh.windowStart && parsed.data <= fresh.windowEnd
+  ? blockedDatesFromWindows(await listBlockingWindows(env.DB, fresh.windowStart, fresh.windowEnd))
+  : new Set<string>();
+```
+
+And `resolveAvailability`'s first branch returned `"unknown"` unconditionally when `cache` was
+null or the date was out of window — it never consulted `blockedDates` there.
+
+**Why that defeats the point:** ADR-0001 (Google Calendar provisioning) is deferred indefinitely
+(`docs/audits/2026-08-27-scheduling-integration-audit.md` §1.1). `GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY`
+was never set on the live `focus` deployment, so `refreshAvailabilityCache()` no-ops on every cron
+tick and the `AVAILABILITY_CACHE` KV entry is essentially always missing or stale there. Under the
+`fresh &&` guard the D1 check therefore almost never fired in production, and a date confirmed
+internally (`blocks_capacity=1`) still resolved `"unknown"` — the exact "always returns unknown for
+blocked dates" problem Decision 2 set out to fix stayed unfixed.
+
+## Why the original test suite didn't catch it
+
+The two tests added with `d36bdc7` both used the module-level `cache` fixture, which
+`describe("handleAvailability")`'s `beforeEach` writes to KV fresh, and the block-time `now`
+(`2026-09-01T00:10:00.000Z`) is inside the 30-minute staleness threshold of that fixture's
+`generatedAt`. So both ran on the **fresh-cache** path — the one path where the buggy guard
+happened to let the D1 read through. The stale/missing-cache path — the only path that actually
+exists in production today — was never exercised for a D1-blocked date. The existing
+"falls back to unknown when the cache is older than the staleness threshold" test uses a stale
+cache but an **empty** `events` table, so it couldn't distinguish "D1 not consulted" from
+"D1 consulted, nothing blocking".
+
+## The fix
+
+- **`handleAvailability`** — the `blockedDates` query no longer requires `fresh`. It runs whenever
+  `env.DB` is present and the requested date is inside a tracked window. The window is now sourced
+  from `cache` (fresh **or** stale) when a cache exists, and from the requested day itself when the
+  cache is missing:
+
+  ```ts
+  const windowStart = cache?.windowStart ?? parsed.data;
+  const windowEnd = cache?.windowEnd ?? parsed.data;
+  const blockedDates = env.DB && parsed.data >= windowStart && parsed.data <= windowEnd
+    ? blockedDatesFromWindows(await listBlockingWindows(env.DB, windowStart, windowEnd))
+    : new Set<string>();
+  ```
+
+  The **"date is in-window" bound is preserved** — it is still `parsed.data` within
+  `[windowStart, windowEnd]`, identical to before wherever a cache exists (`fresh` was always either
+  `cache` or `null`, and when it was `null` the old expression skipped the read entirely). What
+  changed is only that freshness is no longer a precondition. When the cache is missing the window
+  degenerates to the single requested day, which is the tightest possible in-window bound and keeps
+  the D1 scan minimal.
+
+- **`resolveAvailability`** stays pure — no new parameters, no `D1Database`/env. Its no-cache /
+  out-of-window branch now returns `"unavailable"` when `blockedDates.has(date)`, before the
+  `"unknown"` fallthrough:
+
+  ```ts
+  if (!cache || date < cache.windowStart || date > cache.windowEnd) {
+    return { ok: true, date, status: blockedDates.has(date) ? "unavailable" : "unknown" };
+  }
+  ```
+
+**Resulting behavior:**
+
+| D1 | KV cache | Result |
+|---|---|---|
+| blocked | any (fresh / stale / missing) | `unavailable` |
+| clear | fresh, date in-window | resolve from cache (unchanged) |
+| clear | stale or missing | `unknown` (unchanged) |
+
+Known boundary, consistent with keeping the in-window bound: a date blocked in D1 but **beyond a
+present-but-stale cache's (stale) window** resolves `"unknown"`. This does not occur in the
+realistic production state (cache missing → window is the requested day → D1 always consulted); it
+would only matter for a cache that was written once long ago and never refreshed, and it resolves
+itself the moment the cache is ever refreshed.
+
+## Tests added (`test/availability-api.test.ts`)
+
+Three cases, all on the previously-uncovered stale/missing-cache path:
+
+1. **"resolves unavailable from a D1 capacity-blocking event when the KV cache is missing
+   entirely"** — `AVAILABILITY_CACHE.delete(...)`, seed a `blocks_capacity=1` event for the
+   requested date, assert `status === "unavailable"`. This is the actual current production state.
+2. **"resolves unavailable from a D1 capacity-blocking event when the KV cache is stale"** — cache
+   present but `now` set past the staleness threshold, same seed, same assertion.
+3. **"still resolves a D1-clear date to unknown when the KV cache is stale"** — no blocking event,
+   stale cache, asserts `status === "unknown"` — pins the third row of the matrix so a future
+   over-correction can't silently flip it.
+
+## Test suite — full run, zero failures
+
+| Suite | Result |
+|---|---|
+| `npm run test:operations` | **158 passed** / 19 files (was 155; +3) |
+| `npm run test:config-isolation` | **3 / 3 passed** |
+| `npm run staff:test` | **32 / 32 passed** |
+| `npm run test:staff:e2e` | **21 passed, 2 skipped, 0 failed** |
+| `npm run typecheck` / `staff:typecheck` | clean |
+| `npm run lint` / `staff:lint` | clean |
+
+**No companion-fixture exception used.** All pre-existing tests pass unchanged; the only edits to
+existing test code were additive (three new `it` blocks).
+
+## Definition of done
+
+- [x] D1 blocking check no longer gated on KV cache freshness (`fresh &&` removed from the
+      `blockedDates` condition; `resolveAvailability` consults `blockedDates` before its `"unknown"`
+      branch).
+- [x] "Date is in-window" bound preserved (`parsed.data` within `[windowStart, windowEnd]`, window
+      sourced from `cache` or the requested day).
+- [x] New test case added: stale cache + D1-blocked → unavailable; missing cache + D1-blocked →
+      unavailable; stale cache + D1-clear → unknown.
+- [x] All existing tests still pass (158 total, zero failures).
+- [x] Committed — `28dd37f`.
+- [x] Pushed to `origin/main` — `38d00cc..28dd37f`.
+- [x] This report section written — bug, fix, and why the original suite missed it.
+
+## ADR-0006 status — unchanged (all decisions still done)
+
+| Decision | Status |
+|---|---|
+| 1, 4, 6 | No code required |
+| **2** | **Done** — `d36bdc7`, corrected by `28dd37f` |
+| **3** | **Done** — `8152c5e` |
+| **5** | **Done** — `2210bb6` |
