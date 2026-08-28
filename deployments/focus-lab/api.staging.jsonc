@@ -19,7 +19,7 @@
     "PUBLIC_SITE_ORIGIN":"https://focus-lab-public-staging.freedomgeneration1111.workers.dev",
     "CUSTOMER_CONVERSATION_ORIGIN":"https://focus-lab-public-staging.freedomgeneration1111.workers.dev",
     "CONCURRENT_EVENT_CAPACITY":"1","PRESENCE_TIMEOUT_SECONDS":"120","ENVIRONMENT":"staging","STAFF_AUTH_MODE":"access","STAFF_HOSTNAME":"",
-    "TURNSTILE_EXPECTED_HOSTNAME":"focus-lab-public-staging.freedomgeneration1111.workers.dev",
+    "TURNSTILE_EXPECTED_HOSTNAMES":"focuslabproductions.com,focus-lab-public-staging.freedomgeneration1111.workers.dev",
     "ACCESS_TEAM_DOMAIN":"https://freedomgeneration1111.cloudflareaccess.com",
     "ACCESS_AUD":"295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000",
     "VAPID_KEYSET_ID":"focus-staging-existing",
