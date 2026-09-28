@@ -32,14 +32,18 @@ function OperationsWorkspace(){
   if(loading)return <Loading label="Opening staff workspace…"/>;
   if(error&&!status)return <main className="login-shell"><ErrorState message={error} onRetry={refreshStatus}/><button className="button text" onClick={logout}>End Development Session</button></main>;
   const detailMatch=route.match(/^\/inquiry\/([^/?]+)/);
+  const hasWebsitePermission=Boolean(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin");
+  const websiteAvailable=status?.websiteManagement.available===true;
   let content;
   if(detailMatch)content=<InquiryDetailView client={session.client} id={decodeURIComponent(detailMatch[1]!)} responders={responders} currentResponderId={session.responder.id} online={online}/>;
   else if(route.startsWith("/schedule")&&businessProfile.capabilities.schedule)content=<ScheduleView client={session.client}/>;
   else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status} currentResponderId={session.responder.id} initialConversationId={new URLSearchParams(route.split("?")[1]??"").get("conversation")} audioState={chatAudioState} onAudioStateChange={setChatAudioState}/>;
   else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   else if(route.startsWith("/settings"))content=<SettingsView client={session.client} status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
-  else if(route.startsWith("/website")&&(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin"))content=<WebsiteView client={session.client}/>;
+  else if(route.startsWith("/website")&&hasWebsitePermission&&websiteAvailable)content=<WebsiteView client={session.client}/>;
+  else if(route.startsWith("/website")&&hasWebsitePermission)content=<WebsiteUnavailable reason={status?.websiteManagement.reason}/>;
   else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
-  if(!routeEnabled(route,businessProfile)||(route.startsWith("/website")&&!(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin")))content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
-  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()} canManageWebsite={Boolean(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin")}>{content}</Shell>;
+  if(!routeEnabled(route,businessProfile)||(route.startsWith("/website")&&!hasWebsitePermission))content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
+  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()} canManageWebsite={hasWebsitePermission&&websiteAvailable}>{content}</Shell>;
 }
+function WebsiteUnavailable({reason}:{reason?:OperationsStatus["websiteManagement"]["reason"]}){const detail=reason==="binding_missing"?"The website content database is not connected to this deployment.":"Website management is not enabled for this deployment.";return <article className="view"><p className="eyebrow">Website</p><h1>Website management unavailable</h1><p>{detail}</p><p className="help-text">No live website content has been changed. Contact an administrator if access is expected here.</p></article>;}

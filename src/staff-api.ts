@@ -1,6 +1,7 @@
 import { createConfiguredMessagingProvider,resolveChatStatus } from "./messaging";
 import { assessScheduling,type SchedulingWindow } from "./scheduling";
 import { permissionsFor } from "./auth";
+import { resolveCmsAvailability } from "./cms-availability";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const workflowStates = new Set(["new","reviewing","qualified","quoted","won","lost","archived"]);
@@ -38,6 +39,7 @@ async function operationsStatus(env: Env,now: string) {
     messaging:{ configured:Boolean(provider),provider:provider?.id ?? null },
     presenceTimeoutSeconds:positiveInteger(env.PRESENCE_TIMEOUT_SECONDS,120),
     eventCapacity:positiveInteger(env.CONCURRENT_EVENT_CAPACITY,1),
+    websiteManagement:resolveCmsAvailability(env),
   });
 }
 

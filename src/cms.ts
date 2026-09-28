@@ -35,6 +35,11 @@ async function currentDocument(db:D1Database,key:CmsDocumentKey){
     FROM cms_documents d JOIN cms_revisions r ON r.revision_id=d.current_revision_id WHERE d.document_key=?`).bind(key).first<RevisionRow>();
   return row?presentRevision(row):null;
 }
+async function revisionById(db:D1Database,key:CmsDocumentKey,revisionId:string){
+  const row=await db.prepare(`SELECT revision_id,document_key,sequence,schema_version,content_json,actor_id,actor_display_name,created_at,restored_from_revision_id
+    FROM cms_revisions WHERE document_key=? AND revision_id=?`).bind(key,revisionId).first<RevisionRow>();
+  return row?presentRevision(row):null;
+}
 async function revisionHistory(db:D1Database,key:CmsDocumentKey){
   const result=await db.prepare(`SELECT revision_id,document_key,sequence,schema_version,content_json,actor_id,actor_display_name,created_at,restored_from_revision_id
     FROM cms_revisions WHERE document_key=? ORDER BY sequence DESC LIMIT 100`).bind(key).all<RevisionRow>();
@@ -67,7 +72,7 @@ async function saveDocument(db:D1Database,key:CmsDocumentKey,expectedRevisionId:
   if(!insert||!update||Number(insert.meta.changes)!==1||Number(update.meta.changes)!==1){
     const current=await currentDocument(db,key);throw new CmsError(409,"cms_revision_conflict",`A newer ${key} draft was saved before this edit`,{currentRevisionId:current?[current.revisionId]:[]});
   }
-  const saved=await currentDocument(db,key);if(!saved)throw new Error("CMS revision was saved without a current document");return saved;
+  const saved=await revisionById(db,key,revisionId);if(!saved)throw new Error("CMS revision was saved without an immutable revision record");return saved;
 }
 async function initializeCms(db:D1Database,value:unknown,actor:StaffIdentity){
   const parsed=cmsInitializationSchema.safeParse(value);if(!parsed.success)throw validation(parsed.error);

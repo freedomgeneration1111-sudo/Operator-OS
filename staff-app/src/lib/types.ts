@@ -7,6 +7,7 @@ export type ChatStatus={ state:"live"|"async"|"unavailable";label:string;destina
 export type OperationsStatus={
   ok:true;chat:ChatStatus;activeResponders:Array<{ id:string;display_label:string;heartbeat_at:string;expires_at:string }>;
   messaging:{ configured:boolean;provider:string|null };presenceTimeoutSeconds:number;eventCapacity:number;
+  websiteManagement:{available:boolean;reason:"available"|"business_disabled"|"configuration_disabled"|"binding_missing"};
 };
 export type InboxItem={
   id:string;workflow_state:WorkflowState;source_channel:string;created_at:string;updated_at:string;full_name:string;
