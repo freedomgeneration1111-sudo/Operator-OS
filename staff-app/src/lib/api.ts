@@ -1,3 +1,4 @@
+import type { CmsContent,CmsDocumentKey,CmsHistory,CmsState } from "./cms-types";
 import type { Assessment,Conversation,ConversationDetail,InboxResponse,InquiryDetail,OperationsStatus,Responder,ScheduleEvent,StaffUser,WorkflowState } from "./types";
 export class ApiError extends Error{constructor(message:string,readonly status:number,readonly code?:string){super(message);}}
 type DevelopmentAuth={token:string;responderId?:string};
@@ -21,6 +22,11 @@ export class OperationsClient{
   note(id:string,body:string){return this.request(`/v1/internal/inquiries/${encodeURIComponent(id)}/notes`,{method:"POST",body:JSON.stringify({body})});}
   assignment(id:string,responderId:string,assigned:boolean){return this.request(`/v1/internal/inquiries/${encodeURIComponent(id)}/assignment`,{method:"PATCH",body:JSON.stringify({responderId,assigned})});}
   capacity(id:string,blocksCapacity:boolean){return this.request(`/v1/internal/inquiries/${encodeURIComponent(id)}/capacity`,{method:"PATCH",body:JSON.stringify({blocksCapacity})});}
+  cmsState(){return this.request<CmsState>("/v1/internal/cms");}
+  cmsHistory(key:CmsDocumentKey){return this.request<CmsHistory>(`/v1/internal/cms/documents/${key}/revisions`);}
+  saveCmsDocument(key:CmsDocumentKey,expectedRevisionId:string,content:CmsContent){return this.request<{ok:true;document:unknown}>(`/v1/internal/cms/documents/${key}`,{method:"PUT",body:JSON.stringify({expectedRevisionId,content})});}
+  restoreCmsRevision(key:CmsDocumentKey,expectedRevisionId:string,revisionId:string){return this.request<{ok:true;document:unknown}>(`/v1/internal/cms/documents/${key}/restore`,{method:"POST",body:JSON.stringify({expectedRevisionId,revisionId})});}
+  cmsSnapshot(){return this.request<Record<string,unknown>>("/v1/internal/cms/snapshot");}
   heartbeat(available:boolean){return this.request<{ok:true;state:"available"|"unavailable";expiresAt:string}>("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({available})});}
   pushConfig(){return this.request<{ok:true;configured:boolean;publicKey:string|null;subscriptionCount:number}>("/v1/internal/push/config");}
   registerPush(subscription:PushSubscriptionJSON){return this.request<{ok:true;subscriptionId:string}>("/v1/internal/push/subscriptions",{method:"PUT",body:JSON.stringify(subscription)});}

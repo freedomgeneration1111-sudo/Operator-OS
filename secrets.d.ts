@@ -7,6 +7,8 @@ interface Env {
   BUSINESS_PROFILE?: string;
   DEPLOYMENT_KEY?: string;
   PUBLIC_API_ENABLED?: string;
+    CMS_ENABLED?: string;
+    CMS_DB?: D1Database;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
   MESSAGING_PROVIDER?: string;
@@ -43,6 +45,8 @@ declare namespace Cloudflare {
     BUSINESS_PROFILE?: string;
     DEPLOYMENT_KEY?: string;
     PUBLIC_API_ENABLED?: string;
+  CMS_ENABLED?: string;
+  CMS_DB?: D1Database;
     ACCESS_TEAM_DOMAIN?: string;
     ACCESS_AUD?: string;
     MESSAGING_PROVIDER?: string;
@@ -73,5 +77,6 @@ declare namespace Cloudflare {
     WHATSAPP_APP_SECRET?: string;
     WHATSAPP_WEBHOOK_RATE_LIMITER?: RateLimit;
     TEST_MIGRATIONS: TestMigration[];
+    TEST_CMS_MIGRATIONS: TestMigration[];
   }
 }

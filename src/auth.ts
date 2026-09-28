@@ -6,18 +6,19 @@ export type StaffAuthEnv={DB:D1Database;ENVIRONMENT?:string;STAFF_AUTH_MODE?:str
 export type StaffIdentity={
   id:string;displayName:string;role:StaffRole;verifiedEmail:string|null;accessSubject:string|null;authMode:"development"|"access";
 };
-export type Permission="crm:read"|"notes:create"|"workflow:update"|"assignment:self"|"assignment:manage"|"capacity:manage"|"presence:self"|"staff:admin";
+export type Permission="crm:read"|"notes:create"|"workflow:update"|"assignment:self"|"assignment:manage"|"capacity:manage"|"presence:self"|"staff:admin"|"website:manage";
 
 const permissions:Record<StaffRole,ReadonlySet<Permission>>={
   responder:new Set(["crm:read","notes:create","workflow:update","assignment:self","presence:self"]),
-  manager:new Set(["crm:read","notes:create","workflow:update","assignment:self","assignment:manage","capacity:manage","presence:self"]),
-  admin:new Set(["crm:read","notes:create","workflow:update","assignment:self","assignment:manage","capacity:manage","presence:self","staff:admin"]),
+  manager:new Set(["crm:read","notes:create","workflow:update","assignment:self","assignment:manage","capacity:manage","presence:self","website:manage"]),
+  admin:new Set(["crm:read","notes:create","workflow:update","assignment:self","assignment:manage","capacity:manage","presence:self","staff:admin","website:manage"]),
 };
 
 export class AuthenticationError extends Error{
   constructor(readonly code:string,message:string,readonly status=401){super(message);}
 }
 export function can(identity:StaffIdentity,permission:Permission){return permissions[identity.role].has(permission);}
+export function permissionsFor(identity:StaffIdentity){return [...permissions[identity.role]];}
 export function requirePermission(identity:StaffIdentity,permission:Permission){
   if(!can(identity,permission))throw new AuthenticationError("forbidden","Your staff role does not permit this action",403);
 }

@@ -18,6 +18,12 @@
 			"database_name": "focus-lab-operations-local",
 			"database_id": "00000000-0000-0000-0000-000000000000",
 			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "CMS_DB",
+			"database_name": "focus-lab-cms-local",
+			"database_id": "00000000-0000-0000-0000-000000000001",
+			"migrations_dir": "cms-migrations"
 		}
 	],
 	"kv_namespaces": [
@@ -66,7 +72,8 @@
 		"STAFF_HOSTNAME": "localhost,127.0.0.1",
 		"BUSINESS_TIMEZONE": "America/Chicago",
 		"AVAILABILITY_WINDOW_MONTHS": "6",
-		"AVAILABILITY_CACHE_STALE_MINUTES": "30"
+		"AVAILABILITY_CACHE_STALE_MINUTES": "30",
+		"CMS_ENABLED": "true"
 	},
 	"observability": {
 		"enabled": true,

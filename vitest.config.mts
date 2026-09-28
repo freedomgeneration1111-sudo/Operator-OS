@@ -4,13 +4,15 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
-    setupFiles: ["test/setup.ts"],
+    setupFiles: ["test/setup.ts","test/cms-setup.ts"],
     pool: cloudflarePool(async () => ({
       wrangler: { configPath: "wrangler.jsonc" },
       miniflare: {
-        d1Databases: { MIGRATION_DB: "sprint-1-migration-test" },
+        d1Databases: { MIGRATION_DB: "sprint-1-migration-test",CMS_DB:"focus-cms-test" },
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("migrations"),
+          TEST_CMS_MIGRATIONS: await readD1Migrations("cms-migrations"),
+          CMS_ENABLED: "true",
           INTERNAL_API_TOKEN: "development-test-token-00000000",
           MESSAGING_PROVIDER: "test-shared-inbox",
           MESSAGING_DESTINATION_URL: "https://messaging.example.test/shared",

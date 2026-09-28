@@ -24,7 +24,7 @@
     "ACCESS_AUD":"295ea7bd524addc2c13be76f041dc72e23fde3fd4a8c4d1c98ae456b8e160000",
     "VAPID_KEYSET_ID":"focus-staging-existing",
     "BUSINESS_TIMEZONE":"America/Chicago","AVAILABILITY_WINDOW_MONTHS":"6","AVAILABILITY_CACHE_STALE_MINUTES":"30",
-    "OPS_NOTIFY_EMAIL":"focuslabproductions@gmail.com","STAFF_CONSOLE_ORIGIN":"https://staff.focuslabproductions.com"
+    "OPS_NOTIFY_EMAIL":"focuslabproductions@gmail.com","STAFF_CONSOLE_ORIGIN":"https://staff.focuslabproductions.com","CMS_ENABLED":"false"
   },
   "observability":{"enabled":true,"logs":{"enabled":true,"head_sampling_rate":1}},
   "durable_objects":{"bindings":[{"name":"CHAT_ROOMS","class_name":"ChatRoom"},{"name":"CHAT_STAFF_HUB","class_name":"StaffChatHub"}]},

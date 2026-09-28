@@ -1,5 +1,6 @@
 import { createConfiguredMessagingProvider,resolveChatStatus } from "./messaging";
 import { assessScheduling,type SchedulingWindow } from "./scheduling";
+import { permissionsFor } from "./auth";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const workflowStates = new Set(["new","reviewing","qualified","quoted","won","lost","archived"]);
@@ -131,5 +132,5 @@ function invalid(message: string) { return Response.json({ ok:false,error:{ code
 async function currentUser(db:D1Database,actor:import("./auth").StaffIdentity,now:string){
   const presence=await db.prepare("SELECT available,heartbeat_at,expires_at FROM responder_presence WHERE responder_id=?").bind(actor.id).first<Record<string,unknown>>();
   const available=Number(presence?.available)===1&&typeof presence?.expires_at==="string"&&presence.expires_at>now;
-  return Response.json({ok:true,user:{id:actor.id,displayName:actor.displayName,role:actor.role,verifiedEmail:actor.verifiedEmail,authMode:actor.authMode,availabilityState:available?"available":"unavailable"}});
+  return Response.json({ok:true,user:{id:actor.id,displayName:actor.displayName,role:actor.role,verifiedEmail:actor.verifiedEmail,authMode:actor.authMode,availabilityState:available?"available":"unavailable",permissions:permissionsFor(actor)}});
 }

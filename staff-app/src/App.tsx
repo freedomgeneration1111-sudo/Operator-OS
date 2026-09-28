@@ -14,6 +14,7 @@ import { ScheduleView } from "./views/ScheduleView";
 import { ChatView } from "./views/ChatView";
 import { SearchView } from "./views/SearchView";
 import { SettingsView } from "./views/SettingsView";
+import { WebsiteView } from "./views/WebsiteView";
 import { businessProfile,routeEnabled } from "./lib/business-profile";
 
 export default function App(){return <SessionProvider><SessionGate/></SessionProvider>;}
@@ -37,7 +38,8 @@ function OperationsWorkspace(){
   else if(route.startsWith("/chat"))content=<ChatView client={session.client} status={status} currentResponderId={session.responder.id} initialConversationId={new URLSearchParams(route.split("?")[1]??"").get("conversation")} audioState={chatAudioState} onAudioStateChange={setChatAudioState}/>;
   else if(route.startsWith("/search"))content=<SearchView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
   else if(route.startsWith("/settings"))content=<SettingsView client={session.client} status={status} responders={responders} currentResponderId={session.responder.id} availability={presence} onAvailability={(next)=>void presence.toggle(next)}/>;
+  else if(route.startsWith("/website")&&(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin"))content=<WebsiteView client={session.client}/>;
   else content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
-  if(!routeEnabled(route,businessProfile))content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
-  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()}>{content}</Shell>;
+  if(!routeEnabled(route,businessProfile)||(route.startsWith("/website")&&!(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin")))content=<InboxView client={session.client} responders={responders} currentResponderId={session.responder.id}/>;
+  return <Shell route={route} status={status} availability={presence} availabilityMessage={presence.message} onAvailability={(next)=>void presence.toggle(next)} responderName={`${session.responder.display_label} · ${session.user.role}`} onLogout={()=>void endSession()} canManageWebsite={Boolean(session.user.permissions?.includes("website:manage")||session.user.role==="manager"||session.user.role==="admin")}>{content}</Shell>;
 }

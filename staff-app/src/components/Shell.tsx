@@ -4,13 +4,13 @@ import { presencePresentation,type HeartbeatState } from "../lib/heartbeat";
 import { useOnline } from "../lib/hooks";
 import { businessProfile,navigationFor } from "../lib/business-profile";
 
-export function Shell({ children,route,status,availability,onAvailability,availabilityMessage,responderName,onLogout }:{
+export function Shell({ children,route,status,availability,onAvailability,availabilityMessage,responderName,onLogout,canManageWebsite }:{
   children:ReactNode;route:string;status:OperationsStatus|null;availability:{ enabled:boolean;state:HeartbeatState };onAvailability:(next:boolean)=>void;
-  availabilityMessage?:string;responderName:string;onLogout:()=>void;
+  availabilityMessage?:string;responderName:string;onLogout:()=>void;canManageWebsite:boolean;
 }){
   const online=useOnline();
   const presence=presencePresentation(availability.enabled,availability.state);
-  const nav=navigationFor(businessProfile);
+  const nav=navigationFor(businessProfile,canManageWebsite);
   return <div className="app-shell">
     <a className="skip-link" href="#main-content">Skip to Main Content</a>
     <aside className="sidebar"><div className="brand">{businessProfile.logoUrl?<img src={businessProfile.logoUrl} alt="" width="40" height="40"/>:null}<span><strong>{businessProfile.shortName}</strong><small>Operations</small></span></div><nav aria-label="Primary">{nav.map(({href,label})=><a key={href} href={`#${href}`} aria-current={route.startsWith(href)?"page":undefined}>{label}</a>)}</nav><button className="button text logout" onClick={onLogout}>End Development Session</button></aside>

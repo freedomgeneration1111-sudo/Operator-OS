@@ -42,6 +42,9 @@ test("Focus and Moses resource/security identities never cross",()=>{
   for(const id of rateIds(focus.api))assert.ok(!rateIds(moses.api).has(id),`cross-business rate-limit namespace ${id}`);
   assert.ok(!moses.console.services.some((service)=>service.service===focus.api.name));
   assert.ok(!focus.console.services.some((service)=>service.service===moses.api.name));
+  assert.equal(vars(focus.api).CMS_ENABLED,"false","Focus CMS stays deployment-blocked until its remote D1 ID is configured");
+  assert.ok(!(moses.api.d1_databases??[]).some((binding)=>binding.binding==="CMS_DB"));
+  assert.notEqual(vars(moses.api).CMS_ENABLED,"true");
 });
 
 test("Moses provisioned deployment uses final isolated security identifiers",()=>{

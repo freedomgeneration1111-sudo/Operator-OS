@@ -1,7 +1,7 @@
 export type WorkflowState="new"|"reviewing"|"qualified"|"quoted"|"won"|"lost"|"archived";
 export type ConflictStatus="clear"|"potential_conflict"|"capacity_conflict"|"review_required";
 export type StaffRole="admin"|"manager"|"responder";
-export type StaffUser={id:string;displayName:string;role:StaffRole;verifiedEmail:string|null;authMode:"development"|"access";availabilityState:"available"|"unavailable"};
+export type StaffUser={id:string;displayName:string;role:StaffRole;verifiedEmail:string|null;authMode:"development"|"access";availabilityState:"available"|"unavailable";permissions?:string[]};
 export type Responder={ id:string;role?:StaffRole;display_label:string;active:number;currently_available:number;heartbeat_at:string|null;expires_at:string|null };
 export type ChatStatus={ state:"live"|"async"|"unavailable";label:string;destinationUrl:string|null;checkedAt:string };
 export type OperationsStatus={
