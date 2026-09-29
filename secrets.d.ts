@@ -9,6 +9,8 @@ interface Env {
   PUBLIC_API_ENABLED?: string;
     CMS_ENABLED?: string;
     CMS_DB?: D1Database;
+    CMS_DEPLOY_HOOK_URL?: string;
+    CMS_RUNNER_SECRET?: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
   MESSAGING_PROVIDER?: string;
@@ -47,6 +49,8 @@ declare namespace Cloudflare {
     PUBLIC_API_ENABLED?: string;
   CMS_ENABLED?: string;
   CMS_DB?: D1Database;
+  CMS_DEPLOY_HOOK_URL?: string;
+  CMS_RUNNER_SECRET?: string;
     ACCESS_TEAM_DOMAIN?: string;
     ACCESS_AUD?: string;
     MESSAGING_PROVIDER?: string;

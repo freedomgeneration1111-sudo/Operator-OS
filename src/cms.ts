@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requirePermission,type StaffIdentity } from "./auth";
 import { CMS_SCHEMA_VERSION,cmsInitializationSchema,parseCmsDocument,type CmsDocument,type CmsDocumentKey } from "./cms-contracts";
+import { handleCmsPublicationApi,publicationState,type PublicationConfig } from "./cms-publication";
 
 const MAX_CMS_BODY_BYTES=256_000;
 const saveSchema=z.object({expectedRevisionId:z.string().min(1).max(160),content:z.unknown()}).strict();
@@ -9,12 +10,13 @@ type RevisionRow={revision_id:string;document_key:CmsDocumentKey;sequence:number
 
 export class CmsError extends Error{constructor(readonly status:number,readonly code:string,message:string,readonly fields?:Record<string,string[]>){super(message);}}
 
-export async function handleCmsApi(request:Request,db:D1Database,path:string,actor:StaffIdentity):Promise<Response|null>{
+export async function handleCmsApi(request:Request,db:D1Database,path:string,actor:StaffIdentity,publication:PublicationConfig={}):Promise<Response|null>{
   if(!path.startsWith("/v1/internal/cms"))return null;
   requirePermission(actor,"website:manage");
-  if(path==="/v1/internal/cms"&&request.method==="GET")return cmsState(db);
+  if(path==="/v1/internal/cms"&&request.method==="GET")return cmsState(db,publication);
   if(path==="/v1/internal/cms/initialize"&&request.method==="POST")return initializeCms(db,await body(request),actor);
   if(path==="/v1/internal/cms/snapshot"&&request.method==="GET")return exportSnapshot(db);
+  const publicationResponse=await handleCmsPublicationApi(request,db,path,actor,publication);if(publicationResponse)return publicationResponse;
   const match=path.match(/^\/v1\/internal\/cms\/documents\/(pricing|faqs)(?:\/(revisions|restore))?$/);
   if(!match)return null;
   const key=match[1] as CmsDocumentKey;const action=match[2];
@@ -25,9 +27,9 @@ export async function handleCmsApi(request:Request,db:D1Database,path:string,act
   return null;
 }
 
-async function cmsState(db:D1Database){
-  const [pricing,faqs]=await Promise.all([currentDocument(db,"pricing"),currentDocument(db,"faqs")]);
-  return response({ok:true,initialized:Boolean(pricing&&faqs),documents:{pricing,faqs}});
+async function cmsState(db:D1Database,config:PublicationConfig){
+  const [pricing,faqs,publication]=await Promise.all([currentDocument(db,"pricing"),currentDocument(db,"faqs"),publicationState(db,Boolean(config.deployHookUrl&&config.runnerSecret))]);
+  return response({ok:true,initialized:Boolean(pricing&&faqs),documents:{pricing,faqs},publication});
 }
 async function currentDocumentResponse(db:D1Database,key:CmsDocumentKey){const document=await currentDocument(db,key);if(!document)throw new CmsError(404,"cms_document_not_initialized",`${key} has not been initialized`);return response({ok:true,document});}
 async function currentDocument(db:D1Database,key:CmsDocumentKey){

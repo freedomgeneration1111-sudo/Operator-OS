@@ -14,6 +14,7 @@ import { handleWhatsAppVerify,handleWhatsAppWebhook,WhatsAppWebhookError } from 
 import { resolveClientBusinessProfile } from "../business-profiles.mts";
 import { CmsError,handleCmsApi } from "./cms";
 import { resolveCmsAvailability } from "./cms-availability";
+import { handleCmsRunnerApi } from "./cms-publication";
 export { ChatRoom,StaffChatHub } from "./chat-durable";
 
 const heartbeatSchema=z.object({available:z.boolean()}).strict();
@@ -58,6 +59,7 @@ async function route(request:Request,env:Env,ctx:ExecutionContext):Promise<Respo
   const profile=resolveClientBusinessProfile(env.BUSINESS_PROFILE);
   const publicApiEnabled=env.PUBLIC_API_ENABLED!=="false";
   if(request.method==="GET"&&url.pathname==="/health")return json({ok:true,service:`operator-os-${profile.key}`,business:profile.key,deployment:env.DEPLOYMENT_KEY??null});
+  if(url.pathname.startsWith("/v1/cms-runner/")){const runner=await handleCmsRunnerApi(request,env,url.pathname);if(runner)return runner;}
   if(request.method==="POST"&&url.pathname==="/v1/inquiries"&&publicApiEnabled&&profile.publicEventInquiry)return publicInquiry(request,env,ctx,"event");
   if(request.method==="POST"&&url.pathname==="/v1/inquiries"&&publicApiEnabled&&profile.publicConsultingInquiry)return publicInquiry(request,env,ctx,"consulting");
   if(url.pathname==="/v1/availability"&&(!publicApiEnabled||!profile.capabilities.availability))return json({ok:false,error:{code:"module_disabled",message:"Availability checks are not enabled for this deployment"}},404);
@@ -73,7 +75,7 @@ async function route(request:Request,env:Env,ctx:ExecutionContext):Promise<Respo
   if(url.pathname.startsWith("/v1/internal/chat/")||url.pathname.startsWith("/v1/internal/conversations/")||url.pathname==="/v1/internal/push/test"||url.pathname.startsWith("/v1/internal/cms")){if(env.CHAT_API)return env.CHAT_API.fetch(request);}
   if(url.pathname.startsWith("/v1/internal/")){
     const actor=await authenticateStaff(request,env);const push=await handlePushApi(request,env,url.pathname,actor);if(push)return push;
-    if(url.pathname.startsWith("/v1/internal/cms")){const availability=resolveCmsAvailability(env);if(!availability.available)return json({ok:false,error:{code:"module_disabled",message:"Website management is not enabled for this deployment"}},404);const cms=await handleCmsApi(request,env.CMS_DB!,url.pathname,actor);if(cms)return cms;}
+    if(url.pathname.startsWith("/v1/internal/cms")){const availability=resolveCmsAvailability(env);if(!availability.available)return json({ok:false,error:{code:"module_disabled",message:"Website management is not enabled for this deployment"}},404);const cms=await handleCmsApi(request,env.CMS_DB!,url.pathname,actor,{deployHookUrl:env.CMS_DEPLOY_HOOK_URL,runnerSecret:env.CMS_RUNNER_SECRET});if(cms)return cms;}
     if(!profile.capabilities.schedule&&url.pathname==="/v1/internal/schedule")return json({ok:false,error:{code:"module_disabled",message:"Scheduling is not enabled for this deployment"}},404);
     if(!profile.capabilities.capacity&&/^\/v1\/internal\/inquiries\/[^/]+\/(capacity|conflicts)$/.test(url.pathname))return json({ok:false,error:{code:"module_disabled",message:"Event capacity is not enabled for this deployment"}},404);
     const nativeChat=await internalConversationRoute(request,env,url.pathname,actor);if(nativeChat)return nativeChat;

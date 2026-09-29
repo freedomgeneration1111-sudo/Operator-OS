@@ -1,4 +1,4 @@
-import type { CmsContent,CmsDocumentKey,CmsHistory,CmsRevision,CmsState } from "./cms-types";
+import type { CmsContent,CmsDocumentKey,CmsHistory,CmsRelease,CmsRevision,CmsState } from "./cms-types";
 import type { Assessment,Conversation,ConversationDetail,InboxResponse,InquiryDetail,OperationsStatus,Responder,ScheduleEvent,StaffUser,WorkflowState } from "./types";
 export class ApiError extends Error{constructor(message:string,readonly status:number,readonly code?:string){super(message);}}
 type DevelopmentAuth={token:string;responderId?:string};
@@ -28,6 +28,8 @@ export class OperationsClient{
   saveCmsDocument(key:CmsDocumentKey,expectedRevisionId:string,content:CmsContent){return this.request<{ok:true;document:CmsRevision}>(`/v1/internal/cms/documents/${key}`,{method:"PUT",body:JSON.stringify({expectedRevisionId,content})});}
   restoreCmsRevision(key:CmsDocumentKey,expectedRevisionId:string,revisionId:string){return this.request<{ok:true;document:CmsRevision}>(`/v1/internal/cms/documents/${key}/restore`,{method:"POST",body:JSON.stringify({expectedRevisionId,revisionId})});}
   cmsSnapshot(){return this.request<Record<string,unknown>>("/v1/internal/cms/snapshot");}
+  publishCmsRelease(requestId=crypto.randomUUID()){return this.request<{ok:true;release:CmsRelease}>("/v1/internal/cms/releases/publish",{method:"POST",body:JSON.stringify({requestId})});}
+  rollbackCmsRelease(releaseId:string,requestId=crypto.randomUUID()){return this.request<{ok:true;release:CmsRelease}>(`/v1/internal/cms/releases/${encodeURIComponent(releaseId)}/rollback`,{method:"POST",body:JSON.stringify({requestId})});}
   heartbeat(available:boolean){return this.request<{ok:true;state:"available"|"unavailable";expiresAt:string}>("/v1/internal/presence/heartbeat",{method:"POST",body:JSON.stringify({available})});}
   pushConfig(){return this.request<{ok:true;configured:boolean;publicKey:string|null;subscriptionCount:number}>("/v1/internal/push/config");}
   registerPush(subscription:PushSubscriptionJSON){return this.request<{ok:true;subscriptionId:string}>("/v1/internal/push/subscriptions",{method:"PUT",body:JSON.stringify(subscription)});}

@@ -6,13 +6,13 @@ const pricing={schemaVersion:1 as const,values:{weddingDjCore:{amount:1700,mode:
 const olderPricing={schemaVersion:1 as const,values:{weddingDjCore:{amount:1600,mode:"from" as const,label:"Earlier DJ label"}}};
 const faqs={schemaVersion:1 as const,common:[{id:"common_one",question:"Can I book one service?",answer:"Yes."}],pricing:[{id:"pricing_one",question:"Is this final?",answer:"It is a starting point."}]};
 const olderFaqs={...faqs,common:[{...faqs.common[0]!,answer:"Earlier answer."}]};
-type Options={availability?:{available:boolean;reason:"available"|"business_disabled"|"configuration_disabled"|"binding_missing"};initialized?:boolean;delayPricingSave?:boolean;conflictPricingOnce?:boolean;actor?:typeof manager|typeof responder};
+type Options={availability?:{available:boolean;reason:"available"|"business_disabled"|"configuration_disabled"|"binding_missing"};initialized?:boolean;delayPricingSave?:boolean;conflictPricingOnce?:boolean;actor?:typeof manager|typeof responder;publicationConfigured?:boolean;liveMatchesDraft?:boolean;rollbackAvailable?:boolean};
 type PricingRevision=ReturnType<typeof pricingRevision>;type FaqRevision=ReturnType<typeof faqRevision>;
 const pricingRevision=(sequence:number,content=pricing)=>({revisionId:`pricing_${sequence}`,documentKey:"pricing" as const,sequence,schemaVersion:1,content,actor:{id:manager.id,displayName:manager.display_label},createdAt:`2026-09-28T12:0${sequence}:00.000Z`,restoredFromRevisionId:null as string|null});
 const faqRevision=(sequence:number,content=faqs)=>({revisionId:`faqs_${sequence}`,documentKey:"faqs" as const,sequence,schemaVersion:1,content,actor:{id:manager.id,displayName:manager.display_label},createdAt:`2026-09-28T12:0${sequence}:00.000Z`,restoredFromRevisionId:null as string|null});
 
 async function mock(page:Page,options:Options={}){
-  let pricingCurrent:PricingRevision=pricingRevision(1);let faqCurrent:FaqRevision=faqRevision(1);let conflicted=false;let restoreCalls=0;const pricingExpectedRevisions:string[]=[];const faqExpectedRevisions:string[]=[];
+  let pricingCurrent:PricingRevision=pricingRevision(1);let faqCurrent:FaqRevision=faqRevision(1);let conflicted=false;let restoreCalls=0;let publishCalls=0;let rollbackCalls=0;let active:Record<string,unknown>|null=null;const pricingExpectedRevisions:string[]=[];const faqExpectedRevisions:string[]=[];
   const pricingHistory:PricingRevision[]=[pricingCurrent,{...pricingRevision(0,olderPricing),revisionId:"pricing_older",createdAt:"2026-09-27T12:00:00.000Z"}];
   const faqHistory:FaqRevision[]=[faqCurrent,{...faqRevision(0,olderFaqs),revisionId:"faqs_older",createdAt:"2026-09-27T12:00:00.000Z"}];
   const actor=options.actor??manager;const availability=options.availability??{available:true as const,reason:"available" as const};
@@ -20,7 +20,11 @@ async function mock(page:Page,options:Options={}){
     const request=route.request();const path=new URL(request.url()).pathname;
     if(path==="/v1/internal/responders")return json(route,{ok:true,responders:[actor]});
     if(path==="/v1/internal/status")return json(route,{ok:true,chat:{state:"async",label:"Message",destinationUrl:null},activeResponders:[],messaging:{configured:false,provider:null},presenceTimeoutSeconds:120,eventCapacity:1,websiteManagement:availability});
-    if(path==="/v1/internal/cms")return json(route,{ok:true,initialized:options.initialized!==false,documents:options.initialized===false?{pricing:null,faqs:null}:{pricing:pricingCurrent,faqs:faqCurrent}});
+    const live={releaseId:"release_live",requestId:"live-request",operationType:"publish",status:"live",schemaVersion:1,integrityHash:"sha256-live",pricingRevisionId:options.liveMatchesDraft?pricingCurrent.revisionId:"pricing_old",faqRevisionId:options.liveMatchesDraft?faqCurrent.revisionId:"faqs_old",actor:{id:manager.id,displayName:manager.display_label},requestedAt:"2026-09-27T12:00:00.000Z",hookTriggeredAt:"2026-09-27T12:00:01.000Z",runnerBuildId:"build-live",sourceGitSha:"abcdef123",workerVersionId:"worker-version-live",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"},startedAt:"2026-09-27T12:00:02.000Z",completedAt:"2026-09-27T12:01:00.000Z",failure:null,rollbackSourceReleaseId:null,rollbackSourceVersionId:null};
+    const prior={...live,releaseId:"release_prior",requestId:"prior-request",pricingRevisionId:"pricing_prior",faqRevisionId:"faqs_prior",workerVersionId:"worker-version-prior",requestedAt:"2026-09-26T12:00:00.000Z"};
+    if(path==="/v1/internal/cms")return json(route,{ok:true,initialized:options.initialized!==false,documents:options.initialized===false?{pricing:null,faqs:null}:{pricing:pricingCurrent,faqs:faqCurrent},publication:{configured:options.publicationConfigured??false,active,live,releases:[...(active?[active]:[]),live,...(options.rollbackAvailable?[prior]:[])]}});
+    if(path==="/v1/internal/cms/releases/publish"&&request.method()==="POST"){publishCalls+=1;active={...live,releaseId:"release_active",requestId:"active-request",status:"queued",pricingRevisionId:pricingCurrent.revisionId,faqRevisionId:faqCurrent.revisionId,workerVersionId:null,runnerBuildId:"build-active",completedAt:null};return json(route,{ok:true,release:active},202);}
+    if(path.endsWith("/rollback")&&path.includes("/releases/")){rollbackCalls+=1;active={...prior,releaseId:"release_rollback",requestId:"rollback-request",operationType:"rollback",status:"queued",rollbackSourceReleaseId:prior.releaseId,rollbackSourceVersionId:prior.workerVersionId};return json(route,{ok:true,release:active},202);}
     if(path.endsWith("/revisions")){const isPricing=path.includes("pricing");return json(route,{ok:true,documentKey:isPricing?"pricing":"faqs",revisions:isPricing?pricingHistory:faqHistory});}
     if(path.endsWith("/restore")){restoreCalls+=1;const body=request.postDataJSON() as {revisionId:string};if(path.includes("pricing")){pricingCurrent={...pricingRevision(pricingCurrent.sequence+1,body.revisionId==="pricing_older"?olderPricing:pricingCurrent.content),restoredFromRevisionId:body.revisionId};pricingHistory.unshift(pricingCurrent);return json(route,{ok:true,document:pricingCurrent});}faqCurrent={...faqRevision(faqCurrent.sequence+1,body.revisionId==="faqs_older"?olderFaqs:faqCurrent.content),restoredFromRevisionId:body.revisionId};faqHistory.unshift(faqCurrent);return json(route,{ok:true,document:faqCurrent});}
     if(path==="/v1/internal/cms/documents/pricing"&&request.method()==="GET")return json(route,{ok:true,document:pricingCurrent});
@@ -34,7 +38,7 @@ async function mock(page:Page,options:Options={}){
     if(path==="/v1/internal/cms/documents/faqs"&&request.method()==="PUT"){const body=request.postDataJSON() as {expectedRevisionId:string;content:typeof faqs};faqExpectedRevisions.push(body.expectedRevisionId);faqCurrent=faqRevision(faqCurrent.sequence+1,body.content);faqHistory.unshift(faqCurrent);return json(route,{ok:true,document:faqCurrent});}
     return json(route,{ok:true});
   });
-  return{pricingExpectedRevisions,faqExpectedRevisions,get restoreCalls(){return restoreCalls;}};
+  return{pricingExpectedRevisions,faqExpectedRevisions,get restoreCalls(){return restoreCalls;},get publishCalls(){return publishCalls;},get rollbackCalls(){return rollbackCalls;}};
 }
 async function login(page:Page,actor=manager){await page.goto("/");await page.getByLabel("Development API token").fill("test-token");await page.getByRole("button",{name:"Connect to Local Operations"}).click();await page.getByLabel("Act as responder").selectOption(actor.id);await page.getByRole("button",{name:"Open Staff Workspace"}).click();}
 async function openWebsite(page:Page){await page.getByRole("link",{name:"Website"}).first().click();await expect(page.getByRole("heading",{name:"Pricing & FAQs"})).toBeVisible();}
@@ -69,6 +73,25 @@ test("unauthorized staff cannot reveal Website navigation and initialized availa
 
 test("enabled but uninitialized CMS shows a staff-facing setup requirement",async({page})=>{
   await mock(page,{initialized:false});await login(page);await page.getByRole("link",{name:"Website"}).first().click();await expect(page.getByRole("heading",{name:"Website content setup required"})).toBeVisible();await expect(page.getByText(/Ask an administrator or developer/)).toBeVisible();await expect(page.locator("body")).not.toContainText("wrangler");
+});
+
+test("publication controls distinguish unsaved, saved, live, and active release state",async({page})=>{
+  const calls=await mock(page,{publicationConfigured:true});await login(page);await openWebsite(page);
+  await expect(page.getByText("UNSAVED FORM INPUT",{exact:true})).toBeVisible();await expect(page.getByText("SAVED DRAFT",{exact:true})).toBeVisible();await expect(page.getByText("LIVE RELEASE",{exact:true})).toBeVisible();
+  const publish=page.getByRole("button",{name:"Publish saved draft"});await expect(publish).toBeEnabled();await page.getByLabel("Amount (USD)").fill("1900");await expect(publish).toBeDisabled();await expect(page.getByText("Save all form changes before publishing.")).toBeVisible();expect(calls.publishCalls).toBe(0);
+  await page.getByRole("button",{name:"Save draft"}).first().click();await expect(publish).toBeEnabled();await publish.click();await expect(page.getByRole("button",{name:"Publication in progress"})).toBeDisabled();await expect(page.getByText("Release queued",{exact:true})).toBeVisible();expect(calls.publishCalls).toBe(1);
+});
+
+test("unconfigured publication has no failing Publish button",async({page})=>{
+  await mock(page);await login(page);await openWebsite(page);await expect(page.getByText("Publication orchestration is not configured")).toBeVisible();await expect(page.getByRole("button",{name:/Publish saved draft/})).toHaveCount(0);
+});
+
+test("a saved draft matching the live release cannot be republished",async({page})=>{
+  await mock(page,{publicationConfigured:true,liveMatchesDraft:true});await login(page);await openWebsite(page);await expect(page.getByText("The saved draft matches the live release.")).toBeVisible();await expect(page.getByRole("button",{name:"Publish saved draft"})).toBeDisabled();
+});
+
+test("rollback is offered only for a prior version and warns that drafts are untouched",async({page})=>{
+  const calls=await mock(page,{publicationConfigured:true,rollbackAvailable:true});await login(page);await openWebsite(page);page.once("dialog",async(dialog)=>{expect(dialog.message()).toContain("does NOT replace the current saved draft");await dialog.accept();});await page.getByRole("button",{name:"Roll back public site"}).click();await expect(page.getByText("Rollback queued",{exact:true})).toBeVisible();expect(calls.rollbackCalls).toBe(1);
 });
 
 async function json(route:Route,body:unknown,status=200){await route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});}

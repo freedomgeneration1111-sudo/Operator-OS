@@ -27,6 +27,7 @@ describe("Focus CMS authorization and isolation",()=>{
   it("rejects anonymous and responder access while granting the single manager capability",async()=>{
     expect((await exports.default.fetch(new Request("https://operations.example.test/v1/internal/cms"))).status).toBe(401);
     expect((await api("/v1/internal/cms",responder)).status).toBe(403);
+    expect((await api("/v1/internal/cms/releases/publish",responder,{method:"POST",body:JSON.stringify({requestId:"unauthorized-publish"})})).status).toBe(403);
     const me=await (await api("/v1/internal/me")).json<{user:{permissions:string[]}}>();
     expect(me.user.permissions).toContain("website:manage");
     expect((await api("/v1/internal/cms")).status).toBe(200);

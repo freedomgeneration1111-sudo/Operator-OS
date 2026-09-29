@@ -13,6 +13,7 @@ export default defineConfig({
           TEST_MIGRATIONS: await readD1Migrations("migrations"),
           TEST_CMS_MIGRATIONS: await readD1Migrations("cms-migrations"),
           CMS_ENABLED: "true",
+          CMS_RUNNER_SECRET: "test-cms-runner-secret-00000000",
           INTERNAL_API_TOKEN: "development-test-token-00000000",
           MESSAGING_PROVIDER: "test-shared-inbox",
           MESSAGING_DESTINATION_URL: "https://messaging.example.test/shared",

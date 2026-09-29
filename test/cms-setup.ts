@@ -17,6 +17,8 @@ beforeEach(async()=>{
     ]);
   }
   await env.CMS_DB.batch([
+    env.CMS_DB.prepare("UPDATE cms_publication_state SET current_live_release_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE singleton=1"),
+    env.CMS_DB.prepare("DELETE FROM cms_releases"),
     env.CMS_DB.prepare("DELETE FROM cms_documents"),
     env.CMS_DB.prepare("DELETE FROM cms_revisions"),
   ]);
