@@ -9,12 +9,13 @@ const restoreSchema=z.object({expectedRevisionId:z.string().min(1).max(160),revi
 type RevisionRow={revision_id:string;document_key:CmsDocumentKey;sequence:number;schema_version:number;content_json:string;actor_id:string;actor_display_name:string;created_at:string;restored_from_revision_id:string|null};
 
 export class CmsError extends Error{constructor(readonly status:number,readonly code:string,message:string,readonly fields?:Record<string,string[]>){super(message);}}
+export type CmsInitializationActor=Pick<StaffIdentity,"id"|"displayName">;
 
 export async function handleCmsApi(request:Request,db:D1Database,path:string,actor:StaffIdentity,publication:PublicationConfig={}):Promise<Response|null>{
   if(!path.startsWith("/v1/internal/cms"))return null;
   requirePermission(actor,"website:manage");
   if(path==="/v1/internal/cms"&&request.method==="GET")return cmsState(db,publication);
-  if(path==="/v1/internal/cms/initialize"&&request.method==="POST")return initializeCms(db,await body(request),actor);
+  if(path==="/v1/internal/cms/initialize"&&request.method==="POST")return initializeCmsFromRequest(request,db,actor);
   if(path==="/v1/internal/cms/snapshot"&&request.method==="GET")return exportSnapshot(db);
   const publicationResponse=await handleCmsPublicationApi(request,db,path,actor,publication);if(publicationResponse)return publicationResponse;
   const match=path.match(/^\/v1\/internal\/cms\/documents\/(pricing|faqs)(?:\/(revisions|restore))?$/);
@@ -76,7 +77,8 @@ async function saveDocument(db:D1Database,key:CmsDocumentKey,expectedRevisionId:
   }
   const saved=await revisionById(db,key,revisionId);if(!saved)throw new Error("CMS revision was saved without an immutable revision record");return saved;
 }
-async function initializeCms(db:D1Database,value:unknown,actor:StaffIdentity){
+export async function initializeCmsFromRequest(request:Request,db:D1Database,actor:CmsInitializationActor){return initializeCmsDocuments(db,await body(request),actor);}
+export async function initializeCmsDocuments(db:D1Database,value:unknown,actor:CmsInitializationActor){
   const parsed=cmsInitializationSchema.safeParse(value);if(!parsed.success)throw validation(parsed.error);
   const initialized:CmsDocumentKey[]=[];
   for(const key of ["pricing","faqs"] as const){

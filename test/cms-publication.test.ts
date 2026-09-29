@@ -20,15 +20,27 @@ async function cms(path:string,body?:unknown,publication=config()){
 }
 async function initialize(){await cms("/v1/internal/cms/initialize",{pricing,faqs},{});}
 async function publish(requestId="publish-request-0001"){const response=await cms("/v1/internal/cms/releases/publish",{requestId});return response.json<{release:Release}>();}
-async function runner(path:string,body:unknown,secret=runnerSecret){const request=new Request(`https://api.example.test${path}`,{method:"POST",headers:{Authorization:`Bearer ${secret}`,"Content-Type":"application/json"},body:JSON.stringify(body)});const response=await handleCmsRunnerApi(request,{BUSINESS_PROFILE:"focus",CMS_ENABLED:"true",CMS_DB:env.CMS_DB,CMS_RUNNER_SECRET:runnerSecret},path);if(!response)throw new Error(`No runner route for ${path}`);return response;}
+async function runner(path:string,body?:unknown,secret=runnerSecret,overrides:Partial<Pick<Env,"BUSINESS_PROFILE"|"CMS_ENABLED"|"CMS_DB"|"CMS_RUNNER_SECRET">>={}){const request=new Request(`https://api.example.test${path}`,{method:body===undefined?"GET":"POST",headers:{Authorization:`Bearer ${secret}`,...(body===undefined?{}:{"Content-Type":"application/json"})},body:body===undefined?undefined:JSON.stringify(body)});const response=await handleCmsRunnerApi(request,{BUSINESS_PROFILE:"focus",CMS_ENABLED:"true",CMS_DB:env.CMS_DB,CMS_RUNNER_SECRET:runnerSecret,...overrides},path);if(!response)throw new Error(`No runner route for ${path}`);return response;}
 async function claim(buildId:string,sha="abcdef1234567890"){return (await runner("/v1/cms-runner/releases/claim",{buildId,runnerSourceGitSha:sha})).json<{release:Release&{snapshot:Snapshot}}>();}
 async function report(releaseId:string,input:Record<string,unknown>){return runner(`/v1/cms-runner/releases/${releaseId}/status`,input);}
-async function makeLive(requestId:string,version:string,runnerSha="abcdef1234567890"){const {release}=await publish(requestId);await claim(release.runnerBuildId!,runnerSha);await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha});const response=await report(release.releaseId,{status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}});return (await response.json<{release:Release}>()).release;}
+async function makeLive(requestId:string,version:string,runnerSha="abcdef1234567890"){const {release}=await publish(requestId);await claim(release.runnerBuildId!,runnerSha);await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha});await report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:[],deploymentTarget:{}});const response=await report(release.releaseId,{status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}});return (await response.json<{release:Release}>()).release;}
 
 type Release={releaseId:string;requestId:string;operationType:"publish"|"rollback";status:string;pricingRevisionId:string;faqRevisionId:string;runnerBuildId:string|null;sourceGitSha:string|null;runnerSourceGitSha:string|null;workerVersionId:string|null;rollbackSourceReleaseId:string|null;failure:{code:string;message:string}|null};
 type Snapshot={documents:{pricing:{revisionId:string;content:typeof pricing};faqs:{revisionId:string;content:typeof faqs}};integrity:{hash:string}};
 
 describe("immutable CMS publication",()=>{
+  it("machine-initializes missing drafts idempotently without overwriting existing edits and stays Focus-only",async()=>{
+    await expect(runner("/v1/cms-runner/initialize",{pricing,faqs},"wrong-secret")).rejects.toMatchObject({status:401,code:"machine_authentication_required"});
+    await expect(runner("/v1/cms-runner/initialize",{pricing:{schemaVersion:1,values:{}},faqs})).rejects.toMatchObject({status:422,code:"validation_error"});
+    const first=await runner("/v1/cms-runner/initialize",{pricing,faqs});expect(first.status).toBe(201);
+    const initial=await first.json<{documents:{pricing:{revisionId:string;actor:{id:string;displayName:string}}}}>();expect(initial.documents.pricing.actor).toEqual({id:"system:cms-bootstrap",displayName:"CMS machine bootstrap"});
+    const changed={...pricing,values:{...pricing.values,weddingDjCore:{...pricing.values.weddingDjCore,label:"Machine bootstrap must preserve this"}}};
+    await handleCmsApi(new Request("https://api.example.test/v1/internal/cms/documents/pricing",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({expectedRevisionId:initial.documents.pricing.revisionId,content:changed})}),env.CMS_DB,"/v1/internal/cms/documents/pricing",actor,{});
+    const rerun=await runner("/v1/cms-runner/initialize",{pricing,faqs});expect(rerun.status).toBe(200);expect((await rerun.json<{initialized:string[]}>()).initialized).toEqual([]);
+    const state=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{content:typeof pricing}}}>();expect(state.documents.pricing.content.values.weddingDjCore.label).toBe("Machine bootstrap must preserve this");
+    await expect(runner("/v1/cms-runner/initialize",{pricing,faqs},runnerSecret,{BUSINESS_PROFILE:"moses"})).rejects.toMatchObject({status:404,code:"module_disabled"});
+  });
+
   it("captures saved revisions immutably and later draft edits do not change the claimed release",async()=>{
     await initialize();const {release}=await publish();const state=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string}}}>();
     const changed={...pricing,values:{...pricing.values,weddingDjCore:{...pricing.values.weddingDjCore,label:"Later saved label"}}};
@@ -44,8 +56,10 @@ describe("immutable CMS publication",()=>{
   it("keeps a second publication blocked while a post-mutation operation remains deploying",async()=>{
     await initialize();const first=await publish("ambiguous-release-0001");await claim(first.release.runnerBuildId!);
     await report(first.release.releaseId,{status:"deploying",buildId:first.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890"});
+    await report(first.release.releaseId,{status:"version_observed",buildId:first.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890",workerVersionId:"version-ambiguous",deploymentUrls:[],deploymentTarget:{source:"structured-wrangler-output"}});
+    await expect(report(first.release.releaseId,{status:"failed",buildId:first.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890",failureCode:"verification_failed",failureMessage:"inconclusive"})).rejects.toMatchObject({status:409,code:"ambiguous_deployment"});
     await expect(publish("blocked-release-0002")).rejects.toMatchObject({status:409,code:"publication_in_progress"});
-    const state=await (await cms("/v1/internal/cms")).json<{publication:{active:Release}}>();expect(state.publication.active).toMatchObject({releaseId:first.release.releaseId,status:"deploying"});
+    const state=await (await runner("/v1/cms-runner/releases/active")).json<{release:Release}>();expect(state.release).toMatchObject({releaseId:first.release.releaseId,status:"deploying",workerVersionId:"version-ambiguous"});
   });
 
   it("rejects missing orchestration configuration and unauthenticated machine runners",async()=>{
@@ -59,8 +73,11 @@ describe("immutable CMS publication",()=>{
     await initialize();const {release}=await publish();await expect(claim("build-other")).rejects.toMatchObject({status:409,code:"release_not_claimable"});await claim(release.runnerBuildId!,"1234567890abcdef");
     await expect(claim(release.runnerBuildId!,"different1234567")).rejects.toMatchObject({status:409,code:"runner_source_mismatch"});
     await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef"});
+    await report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef",workerVersionId:"worker-version-exact",deploymentUrls:[],deploymentTarget:{source:"wrangler-output"}});
+    await expect(report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef",workerVersionId:"different-version",deploymentUrls:[],deploymentTarget:{}})).rejects.toMatchObject({status:409,code:"stale_callback"});
     const liveInput={status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef",workerVersionId:"worker-version-exact",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}};
     const live=await (await report(release.releaseId,liveInput)).json<{release:Release}>();expect(live.release).toMatchObject({status:"live",workerVersionId:"worker-version-exact"});
+    expect((await (await runner("/v1/cms-runner/releases/active")).json<{release:Release|null}>()).release).toBeNull();
     expect((await report(release.releaseId,liveInput)).status).toBe(200);
     await expect(report(release.releaseId,{...liveInput,workerVersionId:"stale-version"})).rejects.toMatchObject({status:409,code:"stale_callback"});
   });
@@ -86,7 +103,7 @@ describe("immutable CMS publication",()=>{
     const rollback=await cms(`/v1/internal/cms/releases/${first.releaseId}/rollback`,{requestId:"rollback-request-0004"});const operation=(await rollback.json<{release:Release}>()).release;
     expect(operation).toMatchObject({operationType:"rollback",rollbackSourceReleaseId:first.releaseId,sourceGitSha:"historicalsha111111",runnerSourceGitSha:null});expect(operation.workerVersionId).toBeNull();
     const claimed=await claim(operation.runnerBuildId!,"fedcba9876543210");expect(claimed.release).toMatchObject({sourceGitSha:"historicalsha111111",runnerSourceGitSha:"fedcba9876543210"});
-    await report(operation.releaseId,{status:"deploying",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210"});await report(operation.releaseId,{status:"live",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210",workerVersionId:"version-first",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{rollback:true}});
+    await report(operation.releaseId,{status:"deploying",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210"});await report(operation.releaseId,{status:"version_observed",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210",workerVersionId:"version-first",deploymentUrls:[],deploymentTarget:{rollback:true}});await report(operation.releaseId,{status:"live",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210",workerVersionId:"version-first",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{rollback:true}});
     after=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string};faqs:{revisionId:string}};publication:{live:Release}}>();expect(after.documents).toEqual(before.documents);expect(after.publication.live.releaseId).toBe(operation.releaseId);
     expect(after.publication.live).toMatchObject({sourceGitSha:"historicalsha111111",runnerSourceGitSha:"fedcba9876543210"});
   });

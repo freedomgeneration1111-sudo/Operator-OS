@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CMS_SCHEMA_VERSION,parseCmsDocument,type FaqDocument,type PricingDocument } from "./cms-contracts";
-import { CmsError,stableStringify } from "./cms";
+import { CmsError,initializeCmsFromRequest,stableStringify } from "./cms";
 import type { StaffIdentity } from "./auth";
 
 export type CmsReleaseStatus="queued"|"building"|"deploying"|"live"|"failed";
@@ -8,11 +8,13 @@ type ReleaseRow={release_id:string;request_id:string;operation_type:"publish"|"r
 type RevisionRow={revision_id:string;schema_version:number;content_json:string};
 export type PublicationConfig={deployHookUrl?:string;runnerSecret?:string;hookFetch?:typeof fetch};
 const MAX_PUBLICATION_BODY_BYTES=64_000;
+const BOOTSTRAP_ACTOR={id:"system:cms-bootstrap",displayName:"CMS machine bootstrap"} as const;
 
 const requestSchema=z.object({requestId:z.string().trim().min(8).max(160)}).strict();
 const claimSchema=z.object({buildId:z.string().trim().min(1).max(200),runnerSourceGitSha:z.string().trim().min(7).max(100)}).strict();
 const statusSchema=z.discriminatedUnion("status",[
   z.object({status:z.literal("deploying"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100)}).strict(),
+  z.object({status:z.literal("version_observed"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100),workerVersionId:z.string().min(1).max(200),deploymentUrls:z.array(z.string().url().max(500)).max(20),deploymentTarget:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict(),
   z.object({status:z.literal("failed"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100),failureCode:z.string().min(1).max(100),failureMessage:z.string().min(1).max(1000)}).strict(),
   z.object({status:z.literal("live"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100),workerVersionId:z.string().min(1).max(200),deploymentUrls:z.array(z.string().url().max(500)).max(20),deploymentTarget:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict(),
 ]);
@@ -41,6 +43,8 @@ export async function handleCmsRunnerApi(request:Request,env:Pick<Env,"CMS_ENABL
   if(!path.startsWith("/v1/cms-runner/"))return null;
   if(env.BUSINESS_PROFILE!=="focus"||env.CMS_ENABLED!=="true"||!env.CMS_DB)throw new CmsError(404,"module_disabled","CMS publication is not enabled for this deployment");
   await authenticateMachine(request,env.CMS_RUNNER_SECRET);
+  if(path==="/v1/cms-runner/initialize"&&request.method==="POST")return initializeCmsFromRequest(request,env.CMS_DB,BOOTSTRAP_ACTOR);
+  if(path==="/v1/cms-runner/releases/active"&&request.method==="GET")return activeRelease(env.CMS_DB);
   if(path==="/v1/cms-runner/releases/claim"&&request.method==="POST"){
     const parsed=claimSchema.safeParse(await readJson(request));if(!parsed.success)throw validation(parsed.error);
     return claimRelease(env.CMS_DB,parsed.data.buildId,parsed.data.runnerSourceGitSha);
@@ -110,6 +114,16 @@ async function reportStatus(db:D1Database,releaseId:string,input:z.infer<typeof 
   const current=await requiredRelease(db,releaseId);
   if(current.runner_build_id!==input.buildId)throw new CmsError(409,"runner_build_mismatch","This runner is not assigned to the release");
   if(current.runner_source_git_sha!==input.runnerSourceGitSha)throw new CmsError(409,"runner_source_mismatch","This runner source is not assigned to the release");
+  if(input.status==="version_observed"){
+    if(current.status!=="deploying")throw transition(current.status,input.status);
+    if(current.worker_version_id&&current.worker_version_id!==input.workerVersionId)throw new CmsError(409,"stale_callback","A different Worker version is already associated with this release");
+    if(!current.worker_version_id){
+      const changed=await db.prepare("UPDATE cms_releases SET worker_version_id=?,deployment_urls_json=?,deployment_target_json=? WHERE release_id=? AND status='deploying' AND runner_build_id=? AND worker_version_id IS NULL")
+        .bind(input.workerVersionId,JSON.stringify(input.deploymentUrls),JSON.stringify(input.deploymentTarget??{}),releaseId,input.buildId).run();
+      if(Number(changed.meta.changes)!==1)throw new CmsError(409,"stale_callback","The release state changed before the observed Worker version was recorded");
+    }
+    return json({ok:true,release:presentRelease(await requiredRelease(db,releaseId))});
+  }
   if(current.status===input.status){
     if(input.status==="live"&&current.worker_version_id!==input.workerVersionId)throw new CmsError(409,"stale_callback","The release already completed with different deployment metadata");
     return json({ok:true,release:presentRelease(current)});
@@ -119,13 +133,15 @@ async function reportStatus(db:D1Database,releaseId:string,input:z.infer<typeof 
     await db.prepare("UPDATE cms_releases SET status='deploying' WHERE release_id=? AND status='building' AND runner_build_id=?").bind(releaseId,input.buildId).run();
   }else if(input.status==="failed"){
     if(!["building","deploying"].includes(current.status))throw transition(current.status,input.status);
+    if(current.worker_version_id)throw new CmsError(409,"ambiguous_deployment","A Worker version is already associated with this release; reconcile it instead of marking it failed");
     await failRelease(db,releaseId,input.failureCode,input.failureMessage,input.buildId,input.runnerSourceGitSha);
   }else{
     if(current.status!=="deploying")throw transition(current.status,input.status);
+    if(current.worker_version_id!==input.workerVersionId)throw new CmsError(409,"stale_callback","The verified Worker version does not match the version associated with this release");
     const completedAt=new Date().toISOString();const urls=JSON.stringify(input.deploymentUrls);const target=JSON.stringify(input.deploymentTarget??{});
     const [updated]=await db.batch([
-      db.prepare("UPDATE cms_releases SET status='live',active_slot=NULL,worker_version_id=?,deployment_urls_json=?,deployment_target_json=?,completed_at=?,failure_code=NULL,failure_message=NULL WHERE release_id=? AND status='deploying' AND runner_build_id=?")
-        .bind(input.workerVersionId,urls,target,completedAt,releaseId,input.buildId),
+      db.prepare("UPDATE cms_releases SET status='live',active_slot=NULL,deployment_urls_json=?,deployment_target_json=?,completed_at=?,failure_code=NULL,failure_message=NULL WHERE release_id=? AND status='deploying' AND runner_build_id=? AND worker_version_id=?")
+        .bind(urls,target,completedAt,releaseId,input.buildId,input.workerVersionId),
       db.prepare(`UPDATE cms_publication_state SET current_live_release_id=?,updated_at=? WHERE singleton=1
         AND EXISTS (SELECT 1 FROM cms_releases WHERE release_id=? AND status='live' AND runner_build_id=? AND completed_at=?)`)
         .bind(releaseId,completedAt,releaseId,input.buildId,completedAt),
@@ -134,6 +150,8 @@ async function reportStatus(db:D1Database,releaseId:string,input:z.infer<typeof 
   }
   return json({ok:true,release:presentRelease(await requiredRelease(db,releaseId))});
 }
+
+async function activeRelease(db:D1Database){const release=await db.prepare("SELECT * FROM cms_releases WHERE active_slot=1 LIMIT 1").first<ReleaseRow>();return json({ok:true,release:release?presentRelease(release):null});}
 
 async function failRelease(db:D1Database,releaseId:string,code:string,message:string,buildId?:string,runnerSourceGitSha?:string){
   const condition=buildId?" AND runner_build_id=?":"";const binds:unknown[]=[code.slice(0,100),message.slice(0,1000),runnerSourceGitSha??null,new Date().toISOString(),releaseId];if(buildId)binds.push(buildId);
