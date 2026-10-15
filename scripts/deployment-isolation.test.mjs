@@ -8,6 +8,7 @@ const inventory={
   moses:{api:read("deployments/moses-jorgensen/api.staging.jsonc"),console:read("deployments/moses-jorgensen/console.staging.jsonc")},
 };
 const db=(config)=>config.d1_databases[0];
+const binding=(config,name)=>(config.d1_databases??[]).find((item)=>item.binding===name);
 const vars=(config)=>config.vars;
 const rateIds=(config)=>new Set((config.ratelimits??[]).map((item)=>item.namespace_id));
 
@@ -42,8 +43,15 @@ test("Focus and Moses resource/security identities never cross",()=>{
   for(const id of rateIds(focus.api))assert.ok(!rateIds(moses.api).has(id),`cross-business rate-limit namespace ${id}`);
   assert.ok(!moses.console.services.some((service)=>service.service===focus.api.name));
   assert.ok(!focus.console.services.some((service)=>service.service===moses.api.name));
-  assert.equal(vars(focus.api).CMS_ENABLED,"false","Focus CMS stays deployment-blocked until its remote D1 ID is configured");
-  assert.ok(!(moses.api.d1_databases??[]).some((binding)=>binding.binding==="CMS_DB"));
+  const focusCms=binding(focus.api,"CMS_DB");
+  assert.equal(vars(focus.api).CMS_ENABLED,"true");
+  assert.equal(focusCms?.database_name,"focuslab-cms-staging");
+  assert.match(focusCms?.database_id??"",/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
+  assert.equal(focusCms?.migrations_dir,"../../cms-migrations");
+  assert.notEqual(focusCms?.database_id,db(focus.api).database_id);
+  assert.equal(binding(focus.console,"CMS_DB"),undefined,"console must not bind the CMS database");
+  assert.equal(binding(moses.api,"CMS_DB"),undefined);
+  assert.equal(binding(moses.console,"CMS_DB"),undefined);
   assert.notEqual(vars(moses.api).CMS_ENABLED,"true");
 });
 
