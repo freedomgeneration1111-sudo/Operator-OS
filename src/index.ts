@@ -72,7 +72,7 @@ async function route(request:Request,env:Env,ctx:ExecutionContext):Promise<Respo
   if(url.pathname==="/v1/webhooks/whatsapp"&&!profile.capabilities.whatsappChannel)return json({ok:false,error:{code:"module_disabled",message:"WhatsApp channel is not enabled for this deployment"}},404);
   if(request.method==="GET"&&url.pathname==="/v1/webhooks/whatsapp")return handleWhatsAppVerify(request,env);
   if(request.method==="POST"&&url.pathname==="/v1/webhooks/whatsapp")return handleWhatsAppWebhook(request,env,ctx);
-  if(url.pathname.startsWith("/v1/internal/chat/")||url.pathname.startsWith("/v1/internal/conversations/")||url.pathname==="/v1/internal/push/test"||url.pathname.startsWith("/v1/internal/cms")){if(env.CHAT_API)return env.CHAT_API.fetch(request);}
+  if((request.method==="GET"&&url.pathname==="/v1/internal/status")||url.pathname.startsWith("/v1/internal/chat/")||url.pathname.startsWith("/v1/internal/conversations/")||url.pathname==="/v1/internal/push/test"||url.pathname.startsWith("/v1/internal/cms")){if(env.CHAT_API)return env.CHAT_API.fetch(request);}
   if(url.pathname.startsWith("/v1/internal/")){
     const actor=await authenticateStaff(request,env);const push=await handlePushApi(request,env,url.pathname,actor);if(push)return push;
     if(url.pathname.startsWith("/v1/internal/cms")){const availability=resolveCmsAvailability(env);if(!availability.available)return json({ok:false,error:{code:"module_disabled",message:"Website management is not enabled for this deployment"}},404);const cms=await handleCmsApi(request,env.CMS_DB!,url.pathname,actor,{deployHookUrl:env.CMS_DEPLOY_HOOK_URL,runnerSecret:env.CMS_RUNNER_SECRET});if(cms)return cms;}
