@@ -69,19 +69,24 @@ For publish, reconciliation uses a previously recorded assigned-runner version o
 
 The release runner is fully testable without Cloudflare mutation through Sunny's `npm run test:lib`; its tests mock both the deploy hook API and Wrangler command. The real Workers Builds commands are documented in Sunny's canonical publication document.
 
-## Remote configuration required before first publication
+## Remote activation state and first-publication gate
 
-No remote CMS resource or hook was created by this milestone. A later authorized setup must:
+Activation Phase 1 completed on 2026-10-15 without publishing Sunny:
 
-1. Create a Focus-only D1 database (recommended `focuslab-cms-staging`), add its real UUID as `CMS_DB` in `deployments/focus-lab/api.staging.jsonc` with `migrations_dir: "../../cms-migrations"`, and apply all `cms-migrations` independently. Do not add it to Moses or the console Worker.
-2. Set `CMS_ENABLED=true` only on the Focus API after the binding exists.
-3. Create a Workers Builds project/deploy hook for the reviewed Sunny repository and `feat/focus-cms-foundation` (or the later approved release branch). Set the build command to `npm run cms:release:build` and deploy command to `npm run cms:release:deploy`.
-4. Store the hook URL as the Operator-OS secret `CMS_DEPLOY_HOOK_URL`.
-5. Generate one strong shared machine credential. Store it as Operator-OS `CMS_RUNNER_SECRET` and as the Sunny Workers Builds secret `CMS_RUNNER_TOKEN`. Set Sunny build variable `OPERATOR_OS_API_URL` to the Focus API origin. Cloudflare supplies `WORKERS_CI_BUILD_UUID` and `WORKERS_CI_COMMIT_SHA`.
-6. Verify the external custom-domain attachment and Sunny's explicit production/review hostname indexing variables before the first release.
-7. Immediately before activation, re-read and record the then-current active Focus public Worker version as the emergency pre-CMS rollback target. The version observed during development is not a durable activation target and must not be hard-coded.
-8. Initialize the CMS from verified current checked-in content, then perform a supervised no-content-change baseline publication before enabling routine staff publishing. Confirm the custom domain and workers.dev endpoint still resolve to the intended Worker during that activation.
+- Dedicated D1 `focuslab-cms-staging` (`3e15b3c4-7592-4d1c-a405-babe072c5822`) is bound only to the Focus API as `CMS_DB`. Migrations `0001_cms_foundation.sql`, `0002_cms_publication.sql`, and `0003_cms_runner_source_sha.sql` are applied. The CRM database and both console deployments remain separate.
+- `CMS_ENABLED=true` is set only on the Focus API. Pricing revision `pricing_init_a0abd8310034cb2becaedb2d` and FAQ revision `faqs_init_956aa932a140086f74ba7787` were machine-bootstrapped from Sunny's checked-in content by `system:cms-bootstrap`; rerunning initialization inserted nothing and did not change either revision.
+- Existing Worker `focus-lab-public-staging` (tag `422da36253d04c3fb7813311a9b055ac`) is connected to `freedomgeneration1111-sudo/Sunny` on `feat/focus-cms-foundation`. Production trigger `255c075f-2014-408e-a05e-b90ee7a75c7d` runs `npm run cms:release:build` then `npm run cms:release:deploy`; no preview trigger exists.
+- Ordinary push builds are suppressed with the deliberately nonexistent `.focus-cms-deploy-hook-only` include path. Cloudflare evaluates build watch paths for push events, while the branch-specific Deploy Hook starts a manual build. Do not add that sentinel file. Cloudflare documents that empty pushes and unusually large push events can bypass path matching, so those push forms must not be used on the connected branch.
+- Deploy Hook `Focus CMS Publish` (`849bd5de-1a1e-4d21-a71c-5d6432144af1`) targets the review branch. Its URL is stored only as API secret `CMS_DEPLOY_HOOK_URL`. One canonical runner credential is stored as API secret `CMS_RUNNER_SECRET` and Builds secret `CMS_RUNNER_TOKEN`; `OPERATOR_OS_API_URL` points to the Focus API origin. Secret values are not committed.
+- The hook has never been triggered, Builds history was empty at setup, `cms_releases` is empty, and `current_live_release_id` is null. Activation Phase 1 did not deploy the public Worker.
 
-As read-only verified on 2026-09-28, `focuslabproductions.com` and `focus-lab-public-staging.freedomgeneration1111.workers.dev` returned byte-identical HTML; the active version observed then was `75917371-275b-4304-a9cd-c3010bf92923`. This is historical inspection evidence only, not the future emergency rollback target. That target must be read again immediately before activation. The custom-domain attachment is not in source-controlled Wrangler config. Wrangler exposed no command for inspecting Workers Builds/Git/deploy-hook association, and no authenticated dashboard browser was available, so the associated repository/branch and any existing hook remain unverified and must be checked manually before configuration. Do not rename the Worker because its name contains `staging`.
+Read-only verification on 2026-10-15 confirmed that `focuslabproductions.com` is externally attached to `focus-lab-public-staging`; it and the workers.dev endpoint returned byte-identical HTML with no `X-Robots-Tag`. The active public version remained `75917371-275b-4304-a9cd-c3010bf92923`. This is historical evidence only, not the emergency rollback target. The custom-domain attachment remains outside source-controlled Wrangler configuration. Do not rename the Worker because its name contains `staging`.
+
+Before the supervised baseline publication in Activation Phase 2:
+
+1. Re-read and record the then-current active Focus public Worker version as the emergency pre-CMS rollback target; never hard-code the Phase 1 observation.
+2. Reconfirm that the external custom domain and workers.dev endpoint represent the intended Worker and that the explicit production/review hostname variables are correct.
+3. Confirm the saved CMS draft still matches the reviewed checked-in pricing and FAQ content.
+4. Perform one supervised no-content-change baseline publication, verify the exact Worker version at 100% traffic, both hostnames, indexing headers, and customer behavior, then test the recorded rollback path before enabling routine staff publishing.
 
 Current editorial scope remains pricing and common/pricing FAQs. Broader CMS content is later work.
