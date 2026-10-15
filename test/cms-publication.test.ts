@@ -7,6 +7,12 @@ import type { StaffIdentity } from "../src/auth";
 
 const actor:StaffIdentity={id:"cms_manager",displayName:"CMS Manager",role:"manager",verifiedEmail:null,accessSubject:null,authMode:"development"};
 const runnerSecret="test-cms-runner-secret-00000000";
+const SOURCE_SHA_A="a".repeat(40);
+const SOURCE_SHA_B="b".repeat(40);
+const SOURCE_SHA_HISTORICAL="1".repeat(40);
+const SOURCE_SHA_NEWER="2".repeat(40);
+const SOURCE_SHA_RUNNER="f".repeat(40);
+const SOURCE_SHA_CURRENT="3".repeat(40);
 const pricing={schemaVersion:1 as const,values:Object.fromEntries(FOCUS_PRICING_KEYS.map((key)=>[key,{amount:100,mode:"from",label:key}]))};
 const faqs={schemaVersion:1 as const,common:[{id:"common_first",question:"First?",answer:"First."}],pricing:[{id:"pricing_first",question:"Price?",answer:"Price."}]};
 let hookSequence=0;
@@ -21,11 +27,11 @@ async function cms(path:string,body?:unknown,publication=config()){
 async function initialize(){await cms("/v1/internal/cms/initialize",{pricing,faqs},{});}
 async function publish(requestId="publish-request-0001"){const response=await cms("/v1/internal/cms/releases/publish",{requestId});return response.json<{release:Release}>();}
 async function runner(path:string,body?:unknown,secret=runnerSecret,overrides:Partial<Pick<Env,"BUSINESS_PROFILE"|"CMS_ENABLED"|"CMS_DB"|"CMS_RUNNER_SECRET">>={}){const request=new Request(`https://api.example.test${path}`,{method:body===undefined?"GET":"POST",headers:{Authorization:`Bearer ${secret}`,...(body===undefined?{}:{"Content-Type":"application/json"})},body:body===undefined?undefined:JSON.stringify(body)});const response=await handleCmsRunnerApi(request,{BUSINESS_PROFILE:"focus",CMS_ENABLED:"true",CMS_DB:env.CMS_DB,CMS_RUNNER_SECRET:runnerSecret,...overrides},path);if(!response)throw new Error(`No runner route for ${path}`);return response;}
-async function claim(buildId:string,sha="abcdef1234567890"){return (await runner("/v1/cms-runner/releases/claim",{buildId,runnerSourceGitSha:sha})).json<{release:Release&{snapshot:Snapshot}}>();}
+async function claim(buildId:string,sha=SOURCE_SHA_A){return (await runner("/v1/cms-runner/releases/claim",{buildId,runnerSourceGitSha:sha})).json<{release:Release&{snapshot:Snapshot}}>();}
 async function report(releaseId:string,input:Record<string,unknown>){return runner(`/v1/cms-runner/releases/${releaseId}/status`,input);}
-async function makeLive(requestId:string,version:string,runnerSha="abcdef1234567890"){const {release}=await publish(requestId);await claim(release.runnerBuildId!,runnerSha);await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha});await report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:[],deploymentTarget:{}});const response=await report(release.releaseId,{status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}});return (await response.json<{release:Release}>()).release;}
+async function makeLive(requestId:string,version:string,runnerSha=SOURCE_SHA_A){const {release}=await publish(requestId);await claim(release.runnerBuildId!,runnerSha);await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha});await report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:[],deploymentTarget:{}});const response=await report(release.releaseId,{status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:runnerSha,workerVersionId:version,deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}});return (await response.json<{release:Release}>()).release;}
 
-type Release={releaseId:string;requestId:string;operationType:"publish"|"rollback";status:string;pricingRevisionId:string;faqRevisionId:string;runnerBuildId:string|null;sourceGitSha:string|null;runnerSourceGitSha:string|null;workerVersionId:string|null;rollbackSourceReleaseId:string|null;failure:{code:string;message:string}|null};
+type Release={releaseId:string;requestId:string;operationType:"publish"|"rollback";status:string;pricingRevisionId:string;faqRevisionId:string;runnerBuildId:string|null;sourceGitSha:string|null;runnerSourceGitSha:string|null;workerVersionId:string|null;rollbackSourceReleaseId:string|null;failure:{code:string;message:string}|null;externalSupersession:{recordedAt:string;reason:string|null;activeWorkerVersionId:string|null;actor:{id:string|null;displayName:string|null}}|null};
 type Snapshot={documents:{pricing:{revisionId:string;content:typeof pricing};faqs:{revisionId:string;content:typeof faqs}};integrity:{hash:string}};
 
 describe("immutable CMS publication",()=>{
@@ -55,9 +61,9 @@ describe("immutable CMS publication",()=>{
 
   it("keeps a second publication blocked while a post-mutation operation remains deploying",async()=>{
     await initialize();const first=await publish("ambiguous-release-0001");await claim(first.release.runnerBuildId!);
-    await report(first.release.releaseId,{status:"deploying",buildId:first.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890"});
-    await report(first.release.releaseId,{status:"version_observed",buildId:first.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890",workerVersionId:"version-ambiguous",deploymentUrls:[],deploymentTarget:{source:"structured-wrangler-output"}});
-    await expect(report(first.release.releaseId,{status:"failed",buildId:first.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890",failureCode:"verification_failed",failureMessage:"inconclusive"})).rejects.toMatchObject({status:409,code:"ambiguous_deployment"});
+    await report(first.release.releaseId,{status:"deploying",buildId:first.release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_A});
+    await report(first.release.releaseId,{status:"version_observed",buildId:first.release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_A,workerVersionId:"version-ambiguous",deploymentUrls:[],deploymentTarget:{source:"structured-wrangler-output"}});
+    await expect(report(first.release.releaseId,{status:"failed",buildId:first.release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_A,failureCode:"verification_failed",failureMessage:"inconclusive"})).rejects.toMatchObject({status:409,code:"ambiguous_deployment"});
     await expect(publish("blocked-release-0002")).rejects.toMatchObject({status:409,code:"publication_in_progress"});
     const state=await (await runner("/v1/cms-runner/releases/active")).json<{release:Release}>();expect(state.release).toMatchObject({releaseId:first.release.releaseId,status:"deploying",workerVersionId:"version-ambiguous"});
   });
@@ -70,12 +76,12 @@ describe("immutable CMS publication",()=>{
   });
 
   it("requires the exact hook build identifier and stores exact successful deployment metadata",async()=>{
-    await initialize();const {release}=await publish();await expect(claim("build-other")).rejects.toMatchObject({status:409,code:"release_not_claimable"});await claim(release.runnerBuildId!,"1234567890abcdef");
-    await expect(claim(release.runnerBuildId!,"different1234567")).rejects.toMatchObject({status:409,code:"runner_source_mismatch"});
-    await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef"});
-    await report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef",workerVersionId:"worker-version-exact",deploymentUrls:[],deploymentTarget:{source:"wrangler-output"}});
-    await expect(report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef",workerVersionId:"different-version",deploymentUrls:[],deploymentTarget:{}})).rejects.toMatchObject({status:409,code:"stale_callback"});
-    const liveInput={status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:"1234567890abcdef",workerVersionId:"worker-version-exact",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}};
+    await initialize();const {release}=await publish();await expect(claim("build-other")).rejects.toMatchObject({status:409,code:"release_not_claimable"});await expect(claim(release.runnerBuildId!,"feat/focus-cms-foundation")).rejects.toMatchObject({status:422,code:"validation_error"});await claim(release.runnerBuildId!,SOURCE_SHA_B);
+    await expect(claim(release.runnerBuildId!,SOURCE_SHA_A)).rejects.toMatchObject({status:409,code:"runner_source_mismatch"});
+    await report(release.releaseId,{status:"deploying",buildId:release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_B});
+    await report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_B,workerVersionId:"worker-version-exact",deploymentUrls:[],deploymentTarget:{source:"wrangler-output"}});
+    await expect(report(release.releaseId,{status:"version_observed",buildId:release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_B,workerVersionId:"different-version",deploymentUrls:[],deploymentTarget:{}})).rejects.toMatchObject({status:409,code:"stale_callback"});
+    const liveInput={status:"live",buildId:release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_B,workerVersionId:"worker-version-exact",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"}};
     const live=await (await report(release.releaseId,liveInput)).json<{release:Release}>();expect(live.release).toMatchObject({status:"live",workerVersionId:"worker-version-exact"});
     expect((await (await runner("/v1/cms-runner/releases/active")).json<{release:Release|null}>()).release).toBeNull();
     expect((await report(release.releaseId,liveInput)).status).toBe(200);
@@ -84,10 +90,10 @@ describe("immutable CMS publication",()=>{
 
   it("leaves the prior live release unchanged after build or deployment failure",async()=>{
     await initialize();const original=await makeLive("original-live-0001","version-original");
-    const buildFailure=await publish("build-failure-0002");await claim(buildFailure.release.runnerBuildId!);await report(buildFailure.release.releaseId,{status:"failed",buildId:buildFailure.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890",failureCode:"build_failed",failureMessage:"Static build failed"});
+    const buildFailure=await publish("build-failure-0002");await claim(buildFailure.release.runnerBuildId!);await report(buildFailure.release.releaseId,{status:"failed",buildId:buildFailure.release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_A,failureCode:"build_failed",failureMessage:"Static build failed"});
     let state=await (await cms("/v1/internal/cms")).json<{publication:{live:Release}}>();// live pointer must not move
     expect(state.publication.live.releaseId).toBe(original.releaseId);
-    const deployFailure=await publish("deploy-failure-0003");await claim(deployFailure.release.runnerBuildId!);await report(deployFailure.release.releaseId,{status:"deploying",buildId:deployFailure.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890"});await report(deployFailure.release.releaseId,{status:"failed",buildId:deployFailure.release.runnerBuildId,runnerSourceGitSha:"abcdef1234567890",failureCode:"deploy_failed",failureMessage:"Wrangler failed"});
+    const deployFailure=await publish("deploy-failure-0003");await claim(deployFailure.release.runnerBuildId!);await report(deployFailure.release.releaseId,{status:"deploying",buildId:deployFailure.release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_A});await report(deployFailure.release.releaseId,{status:"failed",buildId:deployFailure.release.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_A,failureCode:"deploy_failed",failureMessage:"Wrangler failed"});
     state=await (await cms("/v1/internal/cms")).json<{publication:{live:Release}}> ();expect(state.publication.live.releaseId).toBe(original.releaseId);
   });
 
@@ -96,23 +102,43 @@ describe("immutable CMS publication",()=>{
   });
 
   it("rolls back only to a recorded version without altering the saved draft",async()=>{
-    await initialize();const first=await makeLive("first-live-0001","version-first","historicalsha111111");const second=await makeLive("second-live-0002","version-second","newersourcesha22222");
+    await initialize();const first=await makeLive("first-live-0001","version-first",SOURCE_SHA_HISTORICAL);const second=await makeLive("second-live-0002","version-second",SOURCE_SHA_NEWER);
     const before=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string};faqs:{revisionId:string}}}>();
-    const failedRollback=await cms(`/v1/internal/cms/releases/${first.releaseId}/rollback`,{requestId:"rollback-failure-0003"});const failedOperation=(await failedRollback.json<{release:Release}>()).release;await claim(failedOperation.runnerBuildId!,"fedcba9876543210");await report(failedOperation.releaseId,{status:"deploying",buildId:failedOperation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210"});await report(failedOperation.releaseId,{status:"failed",buildId:failedOperation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210",failureCode:"rollback_failed",failureMessage:"Cloudflare rejected rollback"});
+    const failedRollback=await cms(`/v1/internal/cms/releases/${first.releaseId}/rollback`,{requestId:"rollback-failure-0003"});const failedOperation=(await failedRollback.json<{release:Release}>()).release;await claim(failedOperation.runnerBuildId!,SOURCE_SHA_RUNNER);await report(failedOperation.releaseId,{status:"deploying",buildId:failedOperation.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_RUNNER});await report(failedOperation.releaseId,{status:"failed",buildId:failedOperation.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_RUNNER,failureCode:"rollback_failed",failureMessage:"Cloudflare rejected rollback"});
     let after=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string};faqs:{revisionId:string}};publication:{live:Release}}>();expect(after.documents).toEqual(before.documents);expect(after.publication.live.releaseId).toBe(second.releaseId);
     const rollback=await cms(`/v1/internal/cms/releases/${first.releaseId}/rollback`,{requestId:"rollback-request-0004"});const operation=(await rollback.json<{release:Release}>()).release;
-    expect(operation).toMatchObject({operationType:"rollback",rollbackSourceReleaseId:first.releaseId,sourceGitSha:"historicalsha111111",runnerSourceGitSha:null});expect(operation.workerVersionId).toBeNull();
-    const claimed=await claim(operation.runnerBuildId!,"fedcba9876543210");expect(claimed.release).toMatchObject({sourceGitSha:"historicalsha111111",runnerSourceGitSha:"fedcba9876543210"});
-    await report(operation.releaseId,{status:"deploying",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210"});await report(operation.releaseId,{status:"version_observed",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210",workerVersionId:"version-first",deploymentUrls:[],deploymentTarget:{rollback:true}});await report(operation.releaseId,{status:"live",buildId:operation.runnerBuildId,runnerSourceGitSha:"fedcba9876543210",workerVersionId:"version-first",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{rollback:true}});
+    expect(operation).toMatchObject({operationType:"rollback",rollbackSourceReleaseId:first.releaseId,sourceGitSha:SOURCE_SHA_HISTORICAL,runnerSourceGitSha:null});expect(operation.workerVersionId).toBeNull();
+    const claimed=await claim(operation.runnerBuildId!,SOURCE_SHA_RUNNER);expect(claimed.release).toMatchObject({sourceGitSha:SOURCE_SHA_HISTORICAL,runnerSourceGitSha:SOURCE_SHA_RUNNER});
+    await report(operation.releaseId,{status:"deploying",buildId:operation.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_RUNNER});await report(operation.releaseId,{status:"version_observed",buildId:operation.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_RUNNER,workerVersionId:"version-first",deploymentUrls:[],deploymentTarget:{rollback:true}});await report(operation.releaseId,{status:"live",buildId:operation.runnerBuildId,runnerSourceGitSha:SOURCE_SHA_RUNNER,workerVersionId:"version-first",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{rollback:true}});
     after=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string};faqs:{revisionId:string}};publication:{live:Release}}>();expect(after.documents).toEqual(before.documents);expect(after.publication.live.releaseId).toBe(operation.releaseId);
-    expect(after.publication.live).toMatchObject({sourceGitSha:"historicalsha111111",runnerSourceGitSha:"fedcba9876543210"});
+    expect(after.publication.live).toMatchObject({sourceGitSha:SOURCE_SHA_HISTORICAL,runnerSourceGitSha:SOURCE_SHA_RUNNER});
   });
 
   it("does not substitute the current runner SHA when historical rollback source provenance is unknown",async()=>{
     await initialize();const first=await makeLive("unknown-source-first-0001","version-first");await makeLive("unknown-source-second-0002","version-second");
     await env.CMS_DB.prepare("UPDATE cms_releases SET source_git_sha=NULL WHERE release_id=?").bind(first.releaseId).run();
     const response=await cms(`/v1/internal/cms/releases/${first.releaseId}/rollback`,{requestId:"unknown-source-rollback-0003"});const operation=(await response.json<{release:Release}>()).release;
-    expect(operation.sourceGitSha).toBeNull();const claimed=await claim(operation.runnerBuildId!,"currentrunner333333");
-    expect(claimed.release).toMatchObject({sourceGitSha:null,runnerSourceGitSha:"currentrunner333333"});
+    expect(operation.sourceGitSha).toBeNull();const claimed=await claim(operation.runnerBuildId!,SOURCE_SHA_CURRENT);
+    expect(claimed.release).toMatchObject({sourceGitSha:null,runnerSourceGitSha:SOURCE_SHA_CURRENT});
+  });
+
+  it("audit-preservingly records an external restore, clears the live pointer, and excludes the rejected release from rollback",async()=>{
+    await initialize();const rejected=await makeLive("baseline-release-0001","version-rejected",SOURCE_SHA_HISTORICAL);
+    const before=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string};faqs:{revisionId:string}}}>();
+    const repaired=await cms(`/v1/internal/cms/releases/${rejected.releaseId}/external-supersession`,{
+      reason:"baseline_content_parity_failed",
+      expectedWorkerVersionId:"version-rejected",
+      activeWorkerVersionId:"version-emergency-restored",
+    });
+    const release=(await repaired.json<{release:Release}>()).release;
+    expect(release).toMatchObject({status:"live",workerVersionId:"version-rejected",sourceGitSha:SOURCE_SHA_HISTORICAL,externalSupersession:{reason:"baseline_content_parity_failed",activeWorkerVersionId:"version-emergency-restored",actor:{id:actor.id,displayName:actor.displayName}}});
+    expect(release.externalSupersession?.recordedAt).toBeTruthy();
+    const state=await (await cms("/v1/internal/cms")).json<{documents:{pricing:{revisionId:string};faqs:{revisionId:string}};publication:{live:Release|null;active:Release|null;releases:Release[]}}>();
+    expect(state.documents).toEqual(before.documents);expect(state.publication.live).toBeNull();expect(state.publication.active).toBeNull();expect(state.publication.releases.find((item)=>item.releaseId===rejected.releaseId)?.externalSupersession?.reason).toBe("baseline_content_parity_failed");
+    await expect(cms(`/v1/internal/cms/releases/${rejected.releaseId}/rollback`,{requestId:"rejected-rollback-0002"})).rejects.toMatchObject({status:409,code:"rollback_unavailable"});
+    expect(hookSequence).toBe(1);
+    const retry=await cms(`/v1/internal/cms/releases/${rejected.releaseId}/external-supersession`,{reason:"baseline_content_parity_failed",expectedWorkerVersionId:"version-rejected",activeWorkerVersionId:"version-emergency-restored"});
+    expect((await retry.json<{release:Release}>()).release.externalSupersession).toEqual(release.externalSupersession);
+    await expect(cms(`/v1/internal/cms/releases/${rejected.releaseId}/external-supersession`,{reason:"baseline_content_parity_failed",expectedWorkerVersionId:"version-rejected",activeWorkerVersionId:"another-version"})).rejects.toMatchObject({status:409,code:"external_supersession_conflict"});
   });
 });

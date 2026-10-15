@@ -6,7 +6,7 @@ const pricing={schemaVersion:1 as const,values:{weddingDjCore:{amount:1700,mode:
 const olderPricing={schemaVersion:1 as const,values:{weddingDjCore:{amount:1600,mode:"from" as const,label:"Earlier DJ label"}}};
 const faqs={schemaVersion:1 as const,common:[{id:"common_one",question:"Can I book one service?",answer:"Yes."}],pricing:[{id:"pricing_one",question:"Is this final?",answer:"It is a starting point."}]};
 const olderFaqs={...faqs,common:[{...faqs.common[0]!,answer:"Earlier answer."}]};
-type Options={availability?:{available:boolean;reason:"available"|"business_disabled"|"configuration_disabled"|"binding_missing"};initialized?:boolean;delayPricingSave?:boolean;conflictPricingOnce?:boolean;actor?:typeof manager|typeof responder;publicationConfigured?:boolean;liveMatchesDraft?:boolean;rollbackAvailable?:boolean};
+type Options={availability?:{available:boolean;reason:"available"|"business_disabled"|"configuration_disabled"|"binding_missing"};initialized?:boolean;delayPricingSave?:boolean;conflictPricingOnce?:boolean;actor?:typeof manager|typeof responder;publicationConfigured?:boolean;liveMatchesDraft?:boolean;rollbackAvailable?:boolean;externallySuperseded?:boolean};
 type PricingRevision=ReturnType<typeof pricingRevision>;type FaqRevision=ReturnType<typeof faqRevision>;
 const pricingRevision=(sequence:number,content=pricing)=>({revisionId:`pricing_${sequence}`,documentKey:"pricing" as const,sequence,schemaVersion:1,content,actor:{id:manager.id,displayName:manager.display_label},createdAt:`2026-09-28T12:0${sequence}:00.000Z`,restoredFromRevisionId:null as string|null});
 const faqRevision=(sequence:number,content=faqs)=>({revisionId:`faqs_${sequence}`,documentKey:"faqs" as const,sequence,schemaVersion:1,content,actor:{id:manager.id,displayName:manager.display_label},createdAt:`2026-09-28T12:0${sequence}:00.000Z`,restoredFromRevisionId:null as string|null});
@@ -20,9 +20,11 @@ async function mock(page:Page,options:Options={}){
     const request=route.request();const path=new URL(request.url()).pathname;
     if(path==="/v1/internal/responders")return json(route,{ok:true,responders:[actor]});
     if(path==="/v1/internal/status")return json(route,{ok:true,chat:{state:"async",label:"Message",destinationUrl:null},activeResponders:[],messaging:{configured:false,provider:null},presenceTimeoutSeconds:120,eventCapacity:1,websiteManagement:availability});
-    const live={releaseId:"release_live",requestId:"live-request",operationType:"publish",status:"live",schemaVersion:1,integrityHash:"sha256-live",pricingRevisionId:options.liveMatchesDraft?pricingCurrent.revisionId:"pricing_old",faqRevisionId:options.liveMatchesDraft?faqCurrent.revisionId:"faqs_old",actor:{id:manager.id,displayName:manager.display_label},requestedAt:"2026-09-27T12:00:00.000Z",hookTriggeredAt:"2026-09-27T12:00:01.000Z",runnerBuildId:"build-live",sourceGitSha:"abcdef123",runnerSourceGitSha:"abcdef123",workerVersionId:"worker-version-live",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"},startedAt:"2026-09-27T12:00:02.000Z",completedAt:"2026-09-27T12:01:00.000Z",failure:null,rollbackSourceReleaseId:null,rollbackSourceVersionId:null};
+    const live={releaseId:"release_live",requestId:"live-request",operationType:"publish",status:"live",schemaVersion:1,integrityHash:"sha256-live",pricingRevisionId:options.liveMatchesDraft?pricingCurrent.revisionId:"pricing_old",faqRevisionId:options.liveMatchesDraft?faqCurrent.revisionId:"faqs_old",actor:{id:manager.id,displayName:manager.display_label},requestedAt:"2026-09-27T12:00:00.000Z",hookTriggeredAt:"2026-09-27T12:00:01.000Z",runnerBuildId:"build-live",sourceGitSha:"abcdef123",runnerSourceGitSha:"abcdef123",workerVersionId:"worker-version-live",deploymentUrls:["https://focuslabproductions.com"],deploymentTarget:{worker:"focus-lab-public-staging"},startedAt:"2026-09-27T12:00:02.000Z",completedAt:"2026-09-27T12:01:00.000Z",failure:null,rollbackSourceReleaseId:null,rollbackSourceVersionId:null,externalSupersession:null};
     const prior={...live,releaseId:"release_prior",requestId:"prior-request",pricingRevisionId:"pricing_prior",faqRevisionId:"faqs_prior",workerVersionId:"worker-version-prior",requestedAt:"2026-09-26T12:00:00.000Z"};
-    if(path==="/v1/internal/cms")return json(route,{ok:true,initialized:options.initialized!==false,documents:options.initialized===false?{pricing:null,faqs:null}:{pricing:pricingCurrent,faqs:faqCurrent},publication:{configured:options.publicationConfigured??false,active,live,releases:[...(active?[active]:[]),live,...(options.rollbackAvailable?[prior]:[])]}});
+    const superseded={...live,externalSupersession:{recordedAt:"2026-10-15T20:00:00.000Z",reason:"baseline_content_parity_failed",activeWorkerVersionId:"worker-version-emergency",actor:{id:manager.id,displayName:manager.display_label}}};
+    const historyLive=options.externallySuperseded?superseded:live;
+    if(path==="/v1/internal/cms")return json(route,{ok:true,initialized:options.initialized!==false,documents:options.initialized===false?{pricing:null,faqs:null}:{pricing:pricingCurrent,faqs:faqCurrent},publication:{configured:options.publicationConfigured??false,active,live:options.externallySuperseded?null:live,releases:[...(active?[active]:[]),historyLive,...(options.rollbackAvailable?[prior]:[])]}});
     if(path==="/v1/internal/cms/releases/publish"&&request.method()==="POST"){publishCalls+=1;active={...live,releaseId:"release_active",requestId:"active-request",status:"queued",pricingRevisionId:pricingCurrent.revisionId,faqRevisionId:faqCurrent.revisionId,workerVersionId:null,runnerBuildId:"build-active",completedAt:null};return json(route,{ok:true,release:active},202);}
     if(path.endsWith("/rollback")&&path.includes("/releases/")){rollbackCalls+=1;active={...prior,releaseId:"release_rollback",requestId:"rollback-request",operationType:"rollback",status:"queued",rollbackSourceReleaseId:prior.releaseId,rollbackSourceVersionId:prior.workerVersionId};return json(route,{ok:true,release:active},202);}
     if(path.endsWith("/revisions")){const isPricing=path.includes("pricing");return json(route,{ok:true,documentKey:isPricing?"pricing":"faqs",revisions:isPricing?pricingHistory:faqHistory});}
@@ -88,6 +90,16 @@ test("unconfigured publication has no failing Publish button",async({page})=>{
 
 test("a saved draft matching the live release cannot be republished",async({page})=>{
   await mock(page,{publicationConfigured:true,liveMatchesDraft:true});await login(page);await openWebsite(page);await expect(page.getByText("The saved draft matches the live release.")).toBeVisible();await expect(page.getByRole("button",{name:"Publish saved draft"})).toBeDisabled();
+});
+
+
+test("an externally superseded release is historical, not live or rollback-eligible",async({page})=>{
+  await mock(page,{publicationConfigured:true,externallySuperseded:true});await login(page);await openWebsite(page);
+  await expect(page.getByText(/No CMS release currently recorded live/)).toBeVisible();
+  await expect(page.getByText(/Published, later externally superseded/)).toBeVisible();
+  await expect(page.getByText(/baseline content parity failed/)).toBeVisible();
+  await expect(page.getByText(/worker-version-emergency/)).toBeVisible();
+  await expect(page.getByRole("button",{name:"Roll back public site"})).toHaveCount(0);
 });
 
 test("rollback is offered only for a prior version and warns that drafts are untouched",async({page})=>{

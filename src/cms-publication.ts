@@ -4,19 +4,21 @@ import { CmsError,initializeCmsFromRequest,stableStringify } from "./cms";
 import type { StaffIdentity } from "./auth";
 
 export type CmsReleaseStatus="queued"|"building"|"deploying"|"live"|"failed";
-type ReleaseRow={release_id:string;request_id:string;operation_type:"publish"|"rollback";status:CmsReleaseStatus;schema_version:number;snapshot_json:string;integrity_hash:string;pricing_revision_id:string;faq_revision_id:string;actor_id:string;actor_display_name:string;requested_at:string;hook_triggered_at:string|null;runner_build_id:string|null;source_git_sha:string|null;runner_source_git_sha:string|null;worker_version_id:string|null;deployment_urls_json:string|null;deployment_target_json:string|null;started_at:string|null;completed_at:string|null;failure_code:string|null;failure_message:string|null;rollback_source_release_id:string|null;rollback_source_version_id:string|null};
+type ReleaseRow={release_id:string;request_id:string;operation_type:"publish"|"rollback";status:CmsReleaseStatus;schema_version:number;snapshot_json:string;integrity_hash:string;pricing_revision_id:string;faq_revision_id:string;actor_id:string;actor_display_name:string;requested_at:string;hook_triggered_at:string|null;runner_build_id:string|null;source_git_sha:string|null;runner_source_git_sha:string|null;worker_version_id:string|null;deployment_urls_json:string|null;deployment_target_json:string|null;started_at:string|null;completed_at:string|null;failure_code:string|null;failure_message:string|null;rollback_source_release_id:string|null;rollback_source_version_id:string|null;externally_superseded_at:string|null;external_supersession_reason:string|null;externally_active_worker_version_id:string|null;external_supersession_actor_id:string|null;external_supersession_actor_display_name:string|null};
 type RevisionRow={revision_id:string;schema_version:number;content_json:string};
 export type PublicationConfig={deployHookUrl?:string;runnerSecret?:string;hookFetch?:typeof fetch};
 const MAX_PUBLICATION_BODY_BYTES=64_000;
 const BOOTSTRAP_ACTOR={id:"system:cms-bootstrap",displayName:"CMS machine bootstrap"} as const;
 
 const requestSchema=z.object({requestId:z.string().trim().min(8).max(160)}).strict();
-const claimSchema=z.object({buildId:z.string().trim().min(1).max(200),runnerSourceGitSha:z.string().trim().min(7).max(100)}).strict();
+const externalSupersessionSchema=z.object({reason:z.literal("baseline_content_parity_failed"),expectedWorkerVersionId:z.string().trim().min(1).max(200),activeWorkerVersionId:z.string().trim().min(1).max(200)}).strict();
+const gitShaSchema=z.string().trim().regex(/^[0-9a-f]{40}$/i,"Expected a full 40-character Git SHA");
+const claimSchema=z.object({buildId:z.string().trim().min(1).max(200),runnerSourceGitSha:gitShaSchema}).strict();
 const statusSchema=z.discriminatedUnion("status",[
-  z.object({status:z.literal("deploying"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100)}).strict(),
-  z.object({status:z.literal("version_observed"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100),workerVersionId:z.string().min(1).max(200),deploymentUrls:z.array(z.string().url().max(500)).max(20),deploymentTarget:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict(),
-  z.object({status:z.literal("failed"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100),failureCode:z.string().min(1).max(100),failureMessage:z.string().min(1).max(1000)}).strict(),
-  z.object({status:z.literal("live"),buildId:z.string().min(1).max(200),runnerSourceGitSha:z.string().min(7).max(100),workerVersionId:z.string().min(1).max(200),deploymentUrls:z.array(z.string().url().max(500)).max(20),deploymentTarget:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict(),
+  z.object({status:z.literal("deploying"),buildId:z.string().min(1).max(200),runnerSourceGitSha:gitShaSchema}).strict(),
+  z.object({status:z.literal("version_observed"),buildId:z.string().min(1).max(200),runnerSourceGitSha:gitShaSchema,workerVersionId:z.string().min(1).max(200),deploymentUrls:z.array(z.string().url().max(500)).max(20),deploymentTarget:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict(),
+  z.object({status:z.literal("failed"),buildId:z.string().min(1).max(200),runnerSourceGitSha:gitShaSchema,failureCode:z.string().min(1).max(100),failureMessage:z.string().min(1).max(1000)}).strict(),
+  z.object({status:z.literal("live"),buildId:z.string().min(1).max(200),runnerSourceGitSha:gitShaSchema,workerVersionId:z.string().min(1).max(200),deploymentUrls:z.array(z.string().url().max(500)).max(20),deploymentTarget:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional()}).strict(),
 ]);
 
 export async function publicationState(db:D1Database,configured:boolean){
@@ -31,6 +33,10 @@ export async function publicationState(db:D1Database,configured:boolean){
 export async function handleCmsPublicationApi(request:Request,db:D1Database,path:string,actor:StaffIdentity,config:PublicationConfig):Promise<Response|null>{
   if(path==="/v1/internal/cms/releases/publish"&&request.method==="POST"){
     ensureConfigured(config);const input=parseRequest(requestSchema,await readJson(request));const created=await createPublishRelease(db,input.requestId,actor);return created.created?trigger(db,created.release,config):json({ok:true,release:presentRelease(created.release)},202);
+  }
+  const supersession=path.match(/^\/v1\/internal\/cms\/releases\/([^/]+)\/external-supersession$/);
+  if(supersession&&request.method==="POST"){
+    const input=parseRequest(externalSupersessionSchema,await readJson(request));return recordExternalSupersession(db,decodeURIComponent(supersession[1]!),input,actor);
   }
   const rollback=path.match(/^\/v1\/internal\/cms\/releases\/([^/]+)\/rollback$/);
   if(rollback&&request.method==="POST"){
@@ -75,16 +81,35 @@ async function createPublishRelease(db:D1Database,requestId:string,actor:StaffId
 async function createRollbackRelease(db:D1Database,requestId:string,sourceId:string,actor:StaffIdentity){
   const duplicate=await byRequest(db,requestId);if(duplicate)return{release:duplicate,created:false};
   const source=await requiredRelease(db,sourceId);const liveId=await db.prepare("SELECT current_live_release_id FROM cms_publication_state WHERE singleton=1").first<string>("current_live_release_id");
-  if(source.status!=="live"||!source.worker_version_id)throw new CmsError(409,"rollback_unavailable","That release has no verified Worker version available for rollback");
+  if(source.status!=="live"||!source.worker_version_id||source.externally_superseded_at)throw new CmsError(409,"rollback_unavailable","That release has no eligible verified Worker version available for rollback");
   if(liveId===source.release_id)throw new CmsError(409,"already_live","That release is already the current live release");
   const releaseId=`release_${crypto.randomUUID()}`;const requestedAt=new Date().toISOString();
   const result=await db.prepare(`INSERT OR IGNORE INTO cms_releases (release_id,request_id,operation_type,status,active_slot,schema_version,snapshot_json,integrity_hash,pricing_revision_id,faq_revision_id,actor_id,actor_display_name,requested_at,source_git_sha,rollback_source_release_id,rollback_source_version_id)
     SELECT ?,?,'rollback','queued',1,schema_version,snapshot_json,integrity_hash,pricing_revision_id,faq_revision_id,?,?,?,source_git_sha,release_id,worker_version_id
-    FROM cms_releases WHERE release_id=? AND status='live' AND worker_version_id IS NOT NULL
+    FROM cms_releases WHERE release_id=? AND status='live' AND worker_version_id IS NOT NULL AND externally_superseded_at IS NULL
       AND NOT EXISTS (SELECT 1 FROM cms_releases WHERE active_slot=1)`)
     .bind(releaseId,requestId,actor.id,actor.displayName,requestedAt,sourceId).run();
   if(Number(result.meta.changes)!==1)return{release:await explainInsertFailure(db,requestId),created:false};
   return{release:await requiredRelease(db,releaseId),created:true};
+}
+
+async function recordExternalSupersession(db:D1Database,releaseId:string,input:z.infer<typeof externalSupersessionSchema>,actor:StaffIdentity){
+  const release=await requiredRelease(db,releaseId);
+  if(release.externally_superseded_at){
+    const same=release.external_supersession_reason===input.reason&&release.externally_active_worker_version_id===input.activeWorkerVersionId;
+    if(!same)throw new CmsError(409,"external_supersession_conflict","That release already has different external-supersession metadata");
+    return json({ok:true,release:presentRelease(release)});
+  }
+  if(release.status!=="live"||!release.worker_version_id)throw new CmsError(409,"external_supersession_unavailable","Only a successfully published release can be externally superseded");
+  if(release.worker_version_id!==input.expectedWorkerVersionId)throw new CmsError(409,"worker_version_mismatch","The release Worker version does not match the expected version");
+  if(input.activeWorkerVersionId===release.worker_version_id)throw new CmsError(422,"external_version_unchanged","The externally active Worker version must differ from the rejected release version");
+  const recordedAt=new Date().toISOString();const changed=await db.prepare(`UPDATE cms_releases SET externally_superseded_at=?,external_supersession_reason=?,externally_active_worker_version_id=?,external_supersession_actor_id=?,external_supersession_actor_display_name=?
+    WHERE release_id=? AND status='live' AND worker_version_id=? AND externally_superseded_at IS NULL
+      AND EXISTS (SELECT 1 FROM cms_publication_state WHERE singleton=1 AND current_live_release_id=?)
+      AND NOT EXISTS (SELECT 1 FROM cms_releases WHERE active_slot=1)`)
+    .bind(recordedAt,input.reason,input.activeWorkerVersionId,actor.id,actor.displayName,releaseId,input.expectedWorkerVersionId,releaseId).run();
+  if(Number(changed.meta.changes)<1)throw new CmsError(409,"external_supersession_conflict","The release is not the current live CMS release or another publication is active");
+  return json({ok:true,release:presentRelease(await requiredRelease(db,releaseId))});
 }
 
 async function trigger(db:D1Database,release:ReleaseRow,config:PublicationConfig){
@@ -166,7 +191,7 @@ async function snapshotFor(pricing:RevisionRow,faqs:RevisionRow,exportedAt:strin
 async function explainInsertFailure(db:D1Database,requestId:string):Promise<ReleaseRow>{const duplicate=await byRequest(db,requestId);if(duplicate)return duplicate;const active=await db.prepare("SELECT release_id FROM cms_releases WHERE active_slot=1").first<string>("release_id");if(active)throw new CmsError(409,"publication_in_progress","Another publish or rollback operation is already in progress",{releaseId:[active]});throw new CmsError(409,"draft_changed","Saved drafts changed while the release was being captured; review them and publish again");}
 async function byRequest(db:D1Database,requestId:string){return db.prepare("SELECT * FROM cms_releases WHERE request_id=?").bind(requestId).first<ReleaseRow>();}
 async function requiredRelease(db:D1Database,releaseId:string){const row=await db.prepare("SELECT * FROM cms_releases WHERE release_id=?").bind(releaseId).first<ReleaseRow>();if(!row)throw new CmsError(404,"release_not_found","The requested release does not exist");return row;}
-function presentRelease(row:ReleaseRow){return{releaseId:row.release_id,requestId:row.request_id,operationType:row.operation_type,status:row.status,schemaVersion:Number(row.schema_version),integrityHash:row.integrity_hash,pricingRevisionId:row.pricing_revision_id,faqRevisionId:row.faq_revision_id,actor:{id:row.actor_id,displayName:row.actor_display_name},requestedAt:row.requested_at,hookTriggeredAt:row.hook_triggered_at,runnerBuildId:row.runner_build_id,sourceGitSha:row.source_git_sha,runnerSourceGitSha:row.runner_source_git_sha,workerVersionId:row.worker_version_id,deploymentUrls:parseArray(row.deployment_urls_json),deploymentTarget:parseObject(row.deployment_target_json),startedAt:row.started_at,completedAt:row.completed_at,failure:row.failure_code?{code:row.failure_code,message:row.failure_message}:null,rollbackSourceReleaseId:row.rollback_source_release_id,rollbackSourceVersionId:row.rollback_source_version_id};}
+function presentRelease(row:ReleaseRow){return{releaseId:row.release_id,requestId:row.request_id,operationType:row.operation_type,status:row.status,schemaVersion:Number(row.schema_version),integrityHash:row.integrity_hash,pricingRevisionId:row.pricing_revision_id,faqRevisionId:row.faq_revision_id,actor:{id:row.actor_id,displayName:row.actor_display_name},requestedAt:row.requested_at,hookTriggeredAt:row.hook_triggered_at,runnerBuildId:row.runner_build_id,sourceGitSha:row.source_git_sha,runnerSourceGitSha:row.runner_source_git_sha,workerVersionId:row.worker_version_id,deploymentUrls:parseArray(row.deployment_urls_json),deploymentTarget:parseObject(row.deployment_target_json),startedAt:row.started_at,completedAt:row.completed_at,failure:row.failure_code?{code:row.failure_code,message:row.failure_message}:null,rollbackSourceReleaseId:row.rollback_source_release_id,rollbackSourceVersionId:row.rollback_source_version_id,externalSupersession:row.externally_superseded_at?{recordedAt:row.externally_superseded_at,reason:row.external_supersession_reason,activeWorkerVersionId:row.externally_active_worker_version_id,actor:{id:row.external_supersession_actor_id,displayName:row.external_supersession_actor_display_name}}:null};}
 function parseArray(value:string|null){if(!value)return[];try{const parsed=JSON.parse(value) as unknown;return Array.isArray(parsed)?parsed:[];}catch{return[];}}
 function parseObject(value:string|null){if(!value)return null;try{const parsed=JSON.parse(value) as unknown;return parsed&&typeof parsed==="object"&&!Array.isArray(parsed)?parsed:null;}catch{return null;}}
 function ensureConfigured(config:PublicationConfig){if(!config.deployHookUrl||!config.runnerSecret)throw new CmsError(503,"publication_not_configured","Website publication is not configured for this deployment");}
